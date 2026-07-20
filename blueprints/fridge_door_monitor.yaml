@@ -1,0 +1,423 @@
+blueprint:
+  name: Fridge Door Monitor (temperature-physics based)
+  description: >
+    Detects fridge door openings WITHOUT a door contact sensor, purely from the
+    in-fridge temperature signal: a door opening warms the interior toward room
+    temperature much faster (>=0.10 °C/min) than the compressor cycle ever does
+    (<=0.06 °C/min). Opening duration is estimated from first-order mixing
+    physics: t_open = -tau * ln(1 - dT_peak / (T_room - T0)).
+    Fires fridge_door_opened / fridge_door_closed / fridge_door_ajar events,
+    writes logbook entries, maintains counters/durations in helpers (see the
+    fridge-stats package, which ships matching helpers as defaults), and runs
+    user-defined alarm actions for door-ajar and over-temperature conditions.
+    Designed to be instantiated per appliance (fridge, freezer, ...) with its
+    own helper set.
+  domain: automation
+  author: lunetics
+  source_url: https://github.com/lunetics/fridge-stats/blob/main/blueprints/fridge_door_monitor.yaml
+  homeassistant:
+    min_version: "2026.6.0"  # per-step note: annotations require 2026.6
+  input:
+    sensors:
+      name: Sensors
+      icon: mdi:thermometer
+      input:
+        fridge_temp_sensor:
+          name: Fridge temperature sensor
+          description: Temperature sensor INSIDE the fridge.
+          selector:
+            entity:
+              domain: sensor
+              device_class: temperature
+        ambient_temp_sensor:
+          name: Ambient temperature sensor
+          description: >
+            Room temperature reference (thermal driving force). A sensor in or
+            near the kitchen; any same-floor room sensor works.
+          selector:
+            entity:
+              domain: sensor
+              device_class: temperature
+        aux_open_sensor:
+          name: Auxiliary door sensor (optional, future feature)
+          description: >
+            Optional motion/vibration/contact binary_sensor on the fridge door
+            for precise open/close timestamps. v1 logs its events alongside the
+            thermal detection (sensor fusion is a planned feature); leave empty
+            if not available.
+          default: []
+          selector:
+            entity:
+              domain: binary_sensor
+    state_helpers:
+      name: State helpers (defaults = fridge-stats package)
+      icon: mdi:database
+      collapsed: true
+      input:
+        helper_door_open:
+          name: Door-state boolean
+          default: input_boolean.fridge_door_open
+          selector:
+            entity:
+              domain: input_boolean
+        helper_t0:
+          name: T0 snapshot helper
+          default: input_number.fridge_t0
+          selector:
+            entity:
+              domain: input_number
+        helper_troom0:
+          name: Room-temp snapshot helper
+          default: input_number.fridge_troom0
+          selector:
+            entity:
+              domain: input_number
+        helper_tau:
+          name: Tau calibration constant helper (seconds)
+          default: input_number.fridge_tau
+          selector:
+            entity:
+              domain: input_number
+        helper_opened_at:
+          name: Opened-at timestamp helper
+          default: input_datetime.fridge_opened_at
+          selector:
+            entity:
+              domain: input_datetime
+        helper_last_duration:
+          name: Last opening duration helper (seconds)
+          default: input_number.fridge_last_open_duration
+          selector:
+            entity:
+              domain: input_number
+        helper_last_class:
+          name: Last event class helper
+          default: input_text.fridge_last_event_class
+          selector:
+            entity:
+              domain: input_text
+        counter_openings:
+          name: Openings counter
+          default: counter.fridge_openings_total
+          selector:
+            entity:
+              domain: counter
+        helper_open_seconds_total:
+          name: Accumulated open-seconds helper
+          default: input_number.fridge_open_seconds_total
+          selector:
+            entity:
+              domain: input_number
+    thresholds:
+      name: Detection thresholds
+      icon: mdi:tune
+      collapsed: true
+      input:
+        rise_rate_min:
+          name: Minimum rise rate (°C/min)
+          description: >
+            Door events rise >=0.3 °C/min, compressor <=0.06 °C/min. Default
+            0.10 sits between with margin.
+          default: 0.10
+          selector:
+            number: {min: 0.02, max: 0.5, step: 0.01, unit_of_measurement: "°C/min"}
+        rise_amp_min:
+          name: Minimum excursion amplitude (°C)
+          description: Total rise below this is discarded as a blip (not counted).
+          default: 0.30
+          selector:
+            number: {min: 0.1, max: 1.0, step: 0.05, unit_of_measurement: "°C"}
+        fall_confirm:
+          name: Fall confirmation (°C)
+          description: A report this far below the previous one closes the event.
+          default: 0.05
+          selector:
+            number: {min: 0.02, max: 0.5, step: 0.01, unit_of_measurement: "°C"}
+        ajar_minutes:
+          name: Door-ajar warning after (minutes)
+          default: 20
+          selector:
+            number: {min: 5, max: 120, step: 1, unit_of_measurement: min}
+        critical_temp:
+          name: Critical fridge temperature (°C)
+          description: Sustained (10 min) temperature above this fires the critical alarm.
+          default: 11
+          selector:
+            number: {min: 6, max: 20, step: 0.5, unit_of_measurement: "°C"}
+        stale_hours:
+          name: Stale-state guard (hours)
+          description: >
+            If the closing report arrives more than this many hours after the
+            recorded opening (e.g. the automation was paused mid-event or the
+            sensor was away), the stale event is discarded instead of booking
+            an absurd duration. Real door-ajar incidents stay well below this.
+          default: 6
+          selector:
+            number: {min: 1, max: 48, step: 1, unit_of_measurement: h}
+    alarms:
+      name: Alarm actions
+      icon: mdi:alarm-light
+      input:
+        warn_actions:
+          name: Door-ajar warning actions
+          description: Runs when the door seems open/ajar for the warning time.
+          default: []
+          selector:
+            action: {}
+        critical_actions:
+          name: Critical over-temperature actions
+          description: Runs when the fridge stays above the critical temperature.
+          default: []
+          selector:
+            action: {}
+
+mode: queued
+max: 25
+max_exceeded: silent
+
+variables:
+  fridge_sensor: !input fridge_temp_sensor
+  ambient_sensor: !input ambient_temp_sensor
+  helper_open_seconds: !input helper_open_seconds_total
+  helper_t0: !input helper_t0
+  helper_troom0: !input helper_troom0
+  helper_tau: !input helper_tau
+  helper_opened_at: !input helper_opened_at
+  door_helper: !input helper_door_open
+  rise_rate_min: !input rise_rate_min
+  rise_amp_min: !input rise_amp_min
+  fall_confirm: !input fall_confirm
+  stale_hours: !input stale_hours
+
+triggers:
+  - trigger: state
+    entity_id: !input fridge_temp_sensor
+    id: temp_report
+  - trigger: state
+    entity_id: !input helper_door_open
+    to: "on"
+    for:
+      minutes: !input ajar_minutes
+    id: ajar_time
+  - trigger: numeric_state
+    entity_id: !input fridge_temp_sensor
+    above: !input critical_temp
+    for: "00:10:00"
+    id: critical_temp
+  - trigger: state
+    entity_id: !input aux_open_sensor
+    to: "on"
+    id: aux_open
+
+actions:
+  - choose:
+      # ---- door OPENED: fast temperature rise while considered closed ----
+      - conditions:
+          - condition: trigger
+            id: temp_report
+          - condition: state
+            entity_id: !input helper_door_open
+            state: "off"
+          - >-
+            {{ trigger.from_state is not none
+               and trigger.to_state.state not in ['unknown', 'unavailable']
+               and trigger.from_state.state not in ['unknown', 'unavailable'] }}
+          - >-
+            {% set dv = trigger.to_state.state | float(0) - trigger.from_state.state | float(0) %}
+            {% set dt = [(trigger.to_state.last_updated - trigger.from_state.last_updated).total_seconds(), 1] | max %}
+            {{ dv >= 0.15 and (dv / dt * 60) >= rise_rate_min | float(0.1) }}
+        sequence:
+          - action: input_number.set_value
+            target:
+              entity_id: !input helper_t0
+            data:
+              value: "{{ trigger.from_state.state | float(5) }}"
+            note: "T0 = value BEFORE the rise segment — the true pre-opening baseline."
+          - action: input_number.set_value
+            target:
+              entity_id: !input helper_troom0
+            data:
+              value: "{{ states(ambient_sensor) | float(21) }}"
+          - action: input_datetime.set_datetime
+            target:
+              entity_id: !input helper_opened_at
+            data:
+              datetime: "{{ as_local(trigger.from_state.last_updated).strftime('%Y-%m-%d %H:%M:%S') }}"
+            note: "Opening happened between the two reports; the pre-rise report time is the closest bound."
+          - action: input_boolean.turn_on
+            target:
+              entity_id: !input helper_door_open
+          - event: fridge_door_opened
+            event_data:
+              t0: "{{ trigger.from_state.state | float(0) }}"
+              t_room: "{{ states(ambient_sensor) | float(0) }}"
+              opened_at: "{{ as_local(trigger.from_state.last_updated).isoformat() }}"
+              source: temperature
+          - action: logbook.log
+            data:
+              name: Kühlschrank
+              message: >-
+                Tür geöffnet (Anstieg {{ (trigger.to_state.state | float(0) -
+                trigger.from_state.state | float(0)) | round(2) }} K erkannt)
+              entity_id: "{{ door_helper }}"
+
+      # ---- door CLOSED: temperature falls again while considered open ----
+      - conditions:
+          - condition: trigger
+            id: temp_report
+          - condition: state
+            entity_id: !input helper_door_open
+            state: "on"
+          - >-
+            {{ trigger.from_state is not none
+               and trigger.to_state.state not in ['unknown', 'unavailable']
+               and trigger.from_state.state not in ['unknown', 'unavailable'] }}
+          - >-
+            {{ trigger.to_state.state | float(0)
+               < trigger.from_state.state | float(0) - fall_confirm | float(0.05) }}
+        sequence:
+          - variables:
+              t0: "{{ states(helper_t0) | float(5) }}"
+              troom: "{{ states(helper_troom0) | float(21) }}"
+              peak: "{{ trigger.from_state.state | float(5) }}"
+              d_t: "{{ (peak | float(5)) - (t0 | float(5)) }}"
+              drive: "{{ (troom | float(21)) - (t0 | float(5)) }}"
+              opened_ts: "{{ state_attr(helper_opened_at, 'timestamp') }}"
+              wall_s: >-
+                {{ (now().timestamp() - opened_ts | float(0)) | round(0)
+                   if opened_ts not in [none, 'None'] else 0 }}
+              tau: "{{ states(helper_tau) | float(1028) }}"
+              ratio: >-
+                {{ (d_t | float(0)) / (drive | float(20))
+                   if drive | float(0) > 2 else 0 }}
+              sustained: "{{ wall_s | float(0) >= 1500 or d_t | float(0) >= 2.5 }}"
+              duration: >-
+                {% if sustained %}{{ wall_s | float(0) | round(0) }}
+                {%- elif 0 < ratio | float(0) < 0.95 -%}
+                {{ (- (tau | float(1028)) * log(1 - ratio | float(0))) | round(0) }}
+                {%- else %}0{% endif %}
+              door_class: >-
+                {% if sustained %}sustained_warmup
+                {%- elif duration | float(0) < 40 %}quick_grab
+                {%- elif duration | float(0) <= 90 %}normal_grab
+                {%- else %}extended_open{% endif %}
+          - action: input_boolean.turn_off
+            target:
+              entity_id: !input helper_door_open
+          - if:
+              - "{{ d_t | float(0) < rise_amp_min | float(0.3) }}"
+            then:
+              - action: input_text.set_value
+                target:
+                  entity_id: !input helper_last_class
+                data:
+                  value: blip
+              - stop: "excursion below amplitude threshold — not counted"
+            note: "Blips (noise-scale rises) end the open state but are not logged as openings."
+          - if:
+              - "{{ wall_s | float(0) > (stale_hours | float(6)) * 3600 }}"
+            then:
+              - action: input_text.set_value
+                target:
+                  entity_id: !input helper_last_class
+                data:
+                  value: stale_reset
+              - action: logbook.log
+                data:
+                  name: Kühlschrank
+                  message: >-
+                    Veralteter Offen-Zustand verworfen (Öffnung angeblich seit
+                    {{ states(helper_opened_at) }} — Automation zwischenzeitlich pausiert?)
+                  entity_id: "{{ door_helper }}"
+              - stop: "stale open state discarded — not counted"
+            note: "Self-heal: a pause while 'open' must not book a days-long duration."
+          - action: input_number.set_value
+            target:
+              entity_id: !input helper_last_duration
+            data:
+              value: "{{ duration | float(0) }}"
+          - action: input_text.set_value
+            target:
+              entity_id: !input helper_last_class
+            data:
+              value: "{{ door_class }}"
+          - action: counter.increment
+            target:
+              entity_id: !input counter_openings
+          - action: input_number.set_value
+            target:
+              entity_id: !input helper_open_seconds_total
+            data:
+              value: "{{ states(helper_open_seconds) | float(0) + duration | float(0) }}"
+          - event: fridge_door_closed
+            event_data:
+              duration_s: "{{ duration | float(0) }}"
+              class: "{{ door_class }}"
+              dt_peak: "{{ d_t | float(0) | round(2) }}"
+              t0: "{{ t0 | float(0) | round(2) }}"
+              peak: "{{ peak | float(0) | round(2) }}"
+              t_room: "{{ troom | float(0) | round(1) }}"
+              wall_clock_s: "{{ wall_s | float(0) }}"
+              source: temperature
+          - action: logbook.log
+            data:
+              name: Kühlschrank
+              message: >-
+                Tür zu — {{ duration | float(0) | round(0) }} s offen
+                ({{ door_class }}, ΔT {{ d_t | float(0) | round(2) }} K,
+                Raum {{ troom | float(0) | round(1) }} °C)
+              entity_id: "{{ door_helper }}"
+
+      # ---- door AJAR warning: still "open" after N minutes ----
+      - conditions:
+          - condition: trigger
+            id: ajar_time
+        sequence:
+          - event: fridge_door_ajar
+            event_data:
+              opened_at: "{{ states(helper_opened_at) }}"
+              current_temp: "{{ states(fridge_sensor) }}"
+          - action: logbook.log
+            data:
+              name: Kühlschrank
+              message: >-
+                ⚠️ Tür offenbar seit {{ states(helper_opened_at) }} offen/angelehnt
+                (Warnschwelle erreicht)
+              entity_id: "{{ door_helper }}"
+          - if:
+              - "{{ true }}"
+            then: !input warn_actions
+
+      # ---- CRITICAL over-temperature (ajar backstop + appliance failure) ----
+      - conditions:
+          - condition: trigger
+            id: critical_temp
+        sequence:
+          - event: fridge_temp_critical
+            event_data:
+              current_temp: "{{ trigger.to_state.state }}"
+          - action: logbook.log
+            data:
+              name: Kühlschrank
+              message: >-
+                🔴 Innentemperatur kritisch: {{ trigger.to_state.state }} °C
+                seit 10 min (Tür offen vergessen oder Gerätedefekt)
+              entity_id: "{{ door_helper }}"
+          - if:
+              - "{{ true }}"
+            then: !input critical_actions
+
+      # ---- auxiliary sensor (future sensor-fusion feature): log only ----
+      - conditions:
+          - condition: trigger
+            id: aux_open
+        sequence:
+          - event: fridge_aux_trigger
+            event_data:
+              entity_id: "{{ trigger.entity_id }}"
+              at: "{{ now().isoformat() }}"
+          - action: logbook.log
+            data:
+              name: Kühlschrank
+              message: "Aux-Sensor ausgelöst ({{ trigger.entity_id }})"
+              entity_id: "{{ door_helper }}"

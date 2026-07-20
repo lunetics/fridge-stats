@@ -1,0 +1,130 @@
+# Dashboard views for fridge-stats (German + English variant).
+# Copy a view into any dashboard via the raw configuration editor,
+# or use it as a template. Core Lovelace cards only - no HACS needed.
+# NOTE: the two source-sensor entity ids (sensor.eg_kueche_... /
+# sensor.eg_wohnzimmer_...) are the reference installation's - replace
+# them with your own fridge and ambient sensors. The kuhlschrank_* and
+# fridge_* entities are created by the package and match as-is.
+views:
+- title: Kühlschrank
+  path: kuehlschrank
+  icon: mdi:fridge-outline
+  cards:
+  - type: history-graph
+    title: Kühlschrank Temperatur (24 h)
+    hours_to_show: 24
+    entities:
+    - entity: sensor.eg_kueche_kuehlschrank_temperature
+    - entity: input_boolean.fridge_door_open
+  - type: entities
+    title: Tür-Status
+    entities:
+    - sensor.kuhlschrank_turstatus
+    - input_text.fridge_last_event_class
+    - entity: sensor.kuhlschrank_letzte_offnungsdauer_lesbar
+      name: Letzte Öffnungsdauer
+    - input_number.fridge_tau
+    - automation.kuhlschrank_tur_monitor_fridge_stats
+  - type: entities
+    title: Statistik
+    entities:
+    - entity: sensor.kuhlschrank_offnungen_heute
+      name: Öffnungen heute
+    - entity: sensor.kuhlschrank_offnungen_woche
+      name: Öffnungen Woche
+    - entity: sensor.kuhlschrank_offnungen_monat
+      name: Öffnungen Monat
+    - entity: sensor.kuhlschrank_offnungszeit_heute_lesbar
+      name: Öffnungszeit heute
+    - entity: sensor.kuhlschrank_offnungszeit_monat_lesbar
+      name: Öffnungszeit Monat
+    - entity: sensor.kuhlschrank_offnungsdauer_median_7d_lesbar
+      name: Median Dauer (7 d)
+    - entity: sensor.kuhlschrank_offnungsdauer_max_7d_lesbar
+      name: Max Dauer (7 d)
+    - entity: sensor.kuhlschrank_tur_offnungen_gesamt
+      name: Öffnungen gesamt
+    - entity: sensor.kuhlschrank_offnungszeit_gesamt_lesbar
+      name: Öffnungszeit gesamt
+  - type: statistics-graph
+    title: Öffnungen pro Tag (30 Tage)
+    chart_type: bar
+    period: day
+    days_to_show: 30
+    stat_types:
+    - change
+    entities:
+    - sensor.kuhlschrank_tur_offnungen_gesamt
+  - type: statistics-graph
+    title: Ø Öffnungsdauer pro Woche (Jahr)
+    chart_type: line
+    period: week
+    days_to_show: 210
+    stat_types:
+    - mean
+    entities:
+    - sensor.kuhlschrank_tur_letzte_offnungsdauer
+- title: Fridge (EN)
+  path: fridge-en
+  icon: mdi:fridge
+  cards:
+  - type: history-graph
+    title: Fridge temperature (24 h)
+    hours_to_show: 24
+    entities:
+    - entity: sensor.eg_kueche_kuehlschrank_temperature
+      name: Fridge temperature
+    - entity: input_boolean.fridge_door_open
+      name: Door open (detected)
+  - type: entities
+    title: Door status
+    entities:
+    - entity: sensor.kuhlschrank_turstatus
+      name: Door state
+    - entity: input_text.fridge_last_event_class
+      name: Last event class
+    - entity: sensor.kuhlschrank_letzte_offnungsdauer_lesbar
+      name: Last opening duration
+    - entity: input_number.fridge_tau
+      name: Tau (calibration constant)
+    - entity: automation.kuhlschrank_tur_monitor_fridge_stats
+      name: Door monitor automation
+  - type: entities
+    title: Statistics
+    entities:
+    - entity: sensor.kuhlschrank_offnungen_heute
+      name: Openings today
+    - entity: sensor.kuhlschrank_offnungen_woche
+      name: Openings this week
+    - entity: sensor.kuhlschrank_offnungen_monat
+      name: Openings this month
+    - entity: sensor.kuhlschrank_offnungszeit_heute_lesbar
+      name: Open time today
+    - entity: sensor.kuhlschrank_offnungszeit_monat_lesbar
+      name: Open time this month
+    - entity: sensor.kuhlschrank_offnungsdauer_median_7d_lesbar
+      name: Median duration (7 d)
+    - entity: sensor.kuhlschrank_offnungsdauer_max_7d_lesbar
+      name: Max duration (7 d)
+    - entity: sensor.kuhlschrank_tur_offnungen_gesamt
+      name: Openings total
+    - entity: sensor.kuhlschrank_offnungszeit_gesamt_lesbar
+      name: Open time total
+  - type: statistics-graph
+    title: Openings per day (30 d)
+    chart_type: bar
+    period: day
+    days_to_show: 30
+    stat_types:
+    - change
+    entities:
+    - sensor.kuhlschrank_tur_offnungen_gesamt
+  - type: statistics-graph
+    title: Avg opening duration per week (year)
+    chart_type: line
+    period: week
+    days_to_show: 210
+    stat_types:
+    - mean
+    entities:
+    - sensor.kuhlschrank_tur_letzte_offnungsdauer

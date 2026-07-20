@@ -1,0 +1,10 @@
+# local scratch — never commit
+*.bak
+*.bak-*
+*.tmp
+*.log
+.env
+*token*
+scratch/
+.review/
+__pycache__/
