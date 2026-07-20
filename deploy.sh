@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Deploy fridge-stats to Home Assistant via the /config Samba mount.
-# Mount must be active: the mounted HA config dir
+# Deploy fridge-stats to Home Assistant via a mounted /config directory.
+# Point FRIDGE_STATS_CONFIG at it (e.g. a Samba mount of your HA config share).
 set -euo pipefail
 CFG="${FRIDGE_STATS_CONFIG:?set FRIDGE_STATS_CONFIG to your Home Assistant config dir (e.g. a Samba mount of /config)}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
