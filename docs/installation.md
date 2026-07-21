@@ -151,6 +151,8 @@ python3 analysis/backfill_statistics.py --url http://homeassistant.local:8123 \
 # add:  --apply            import the statistics
 #       --replace          clear the target statistics first
 #       --seed             set counter/total helpers + calibrate utility meters
+#       --lang de          target the German package's sensor.kuhlschrank_* ids (default: en)
+#       --ajar-minutes N   match your blueprint ajar_minutes for the seeded event class
 ```
 
 > [!NOTE]

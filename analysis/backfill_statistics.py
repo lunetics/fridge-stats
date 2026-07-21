@@ -255,9 +255,12 @@ async def amain():
     ap.add_argument('--tau-entity', default='input_number.fridge_tau')
     ap.add_argument('--recorder-days', type=int, default=10)
     ap.add_argument('--ceiling-margin', type=float, default=CEIL_MARGIN)
-    ap.add_argument('--openings-stat', default='sensor.kuhlschrank_tur_offnungen_gesamt')
-    ap.add_argument('--seconds-stat', default='sensor.kuhlschrank_tur_offnungszeit_gesamt')
-    ap.add_argument('--duration-stat', default='sensor.kuhlschrank_tur_letzte_offnungsdauer')
+    ap.add_argument('--lang', choices=['en', 'de'], default='en',
+                    help='entity-id language of the deployed package '
+                         '(en = sensor.fridge_*, de = sensor.kuhlschrank_*)')
+    ap.add_argument('--openings-stat', default=None, help='override the --lang default')
+    ap.add_argument('--seconds-stat', default=None, help='override the --lang default')
+    ap.add_argument('--duration-stat', default=None, help='override the --lang default')
     ap.add_argument('--replace', action='store_true', help='clear target statistics first')
     ap.add_argument('--apply', action='store_true', help='import the statistics')
     ap.add_argument('--seed', action='store_true',
@@ -268,6 +271,28 @@ async def amain():
     args = ap.parse_args()
     if not args.token:
         sys.exit('no token: pass --token or set HASS_TOKEN')
+
+    # Package mirror/utility-meter entity ids differ by language variant; default to the
+    # --lang set, allow per-arg overrides for the three import-target stats.
+    STAT_IDS = {
+        'en': ('sensor.fridge_door_openings_total', 'sensor.fridge_door_open_time_total',
+               'sensor.fridge_door_last_opening_duration'),
+        'de': ('sensor.kuhlschrank_tur_offnungen_gesamt', 'sensor.kuhlschrank_tur_offnungszeit_gesamt',
+               'sensor.kuhlschrank_tur_letzte_offnungsdauer'),
+    }
+    UM_IDS = {
+        'en': ('sensor.fridge_openings_today', 'sensor.fridge_openings_week',
+               'sensor.fridge_openings_month', 'sensor.fridge_open_time_today',
+               'sensor.fridge_open_time_month'),
+        'de': ('sensor.kuhlschrank_offnungen_heute', 'sensor.kuhlschrank_offnungen_woche',
+               'sensor.kuhlschrank_offnungen_monat', 'sensor.kuhlschrank_offnungszeit_heute',
+               'sensor.kuhlschrank_offnungszeit_monat'),
+    }
+    _o, _s, _d = STAT_IDS[args.lang]
+    args.openings_stat = args.openings_stat or _o
+    args.seconds_stat = args.seconds_stat or _s
+    args.duration_stat = args.duration_stat or _d
+    um_ids = UM_IDS[args.lang]
 
     now = datetime.now(timezone.utc)
     since = datetime.fromisoformat(args.since).astimezone(timezone.utc)
@@ -336,11 +361,11 @@ async def amain():
             await ws.cmd({'type': 'call_service', 'domain': 'input_number', 'service': 'set_value',
                           'service_data': {'entity_id': 'input_number.fridge_open_seconds_total',
                                            'value': round(total_s)}})
-            for ent, val in [('sensor.kuhlschrank_offnungen_heute', since_count(today0)[0]),
-                             ('sensor.kuhlschrank_offnungen_woche', since_count(week0)[0]),
-                             ('sensor.kuhlschrank_offnungen_monat', since_count(month0)[0]),
-                             ('sensor.kuhlschrank_offnungszeit_heute', since_count(today0)[1]),
-                             ('sensor.kuhlschrank_offnungszeit_monat', since_count(month0)[1])]:
+            for ent, val in [(um_ids[0], since_count(today0)[0]),
+                             (um_ids[1], since_count(week0)[0]),
+                             (um_ids[2], since_count(month0)[0]),
+                             (um_ids[3], since_count(today0)[1]),
+                             (um_ids[4], since_count(month0)[1])]:
                 await ws.cmd({'type': 'call_service', 'domain': 'utility_meter',
                               'service': 'calibrate',
                               'service_data': {'entity_id': ent, 'value': str(val)}})
