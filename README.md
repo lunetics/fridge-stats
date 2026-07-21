@@ -89,10 +89,11 @@ Step-by-step instructions, multi-appliance setup, and troubleshooting:
 
 | Document | Type | Contents |
 |---|---|---|
-| [docs/reference.md](docs/reference.md) | Reference | Blueprint inputs, entities, events and payloads, classes, thresholds |
-| [docs/installation.md](docs/installation.md) | How-to | Install, multi-appliance, τ calibration, troubleshooting |
+| [docs/reference.md](docs/reference.md) | Reference | Blueprint inputs, entities, events and payloads, classes, thresholds, the sensor-silence watchdog |
+| [docs/installation.md](docs/installation.md) | How-to | Install, multi-appliance, τ and threshold calibration, the watchdog, troubleshooting |
 | [docs/physics.md](docs/physics.md) | Explanation | Model derivation, detection design, calibration method, validation evidence, limitations |
 | [docs/ideas.md](docs/ideas.md) | Roadmap | Research-backed feature backlog with sources |
+| [docs/conventions.md](docs/conventions.md) | Conventions | Doc/code style: °C (°F) rendering, instance-specific thresholds, evidence honesty |
 
 ## Limitations
 

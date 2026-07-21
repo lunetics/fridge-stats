@@ -158,6 +158,21 @@ python3 analysis/backfill_statistics.py --url http://homeassistant.local:8123 \
 > [!IMPORTANT]
 > Moving the sensor to a different shelf changes τ. Recalibrate after any reposition.
 
+## Sensor-silence watchdog (optional)
+
+Deploy `blueprints/fridge_sensor_watchdog.yaml` alongside the door monitor to catch a sensor
+that stops reporting (dead battery in the cold, dropped Zigbee link) — which otherwise fails
+invisibly.
+
+1. Copy `blueprints/fridge_sensor_watchdog.yaml` to
+   `<config>/blueprints/automation/fridge_stats/`.
+2. Create an automation from **Sensor Silence Watchdog (fridge-stats)**, select your fridge
+   sensor as the monitored sensor, set `silence_hours` (default 3), and configure
+   `alarm_actions` (and optionally `recovery_actions`) with your notification services.
+
+It needs no package helpers — it is self-contained. Inputs and events:
+[reference.md](reference.md#sensor-silence-watchdog).
+
 ## Monitor a second appliance (freezer)
 
 The blueprint is per-appliance; the package's helpers are one appliance's state.

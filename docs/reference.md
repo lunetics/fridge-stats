@@ -131,6 +131,35 @@ The blueprint runs in `queued` mode so sensor reports are processed strictly in 
 All temperature branches guard both trigger states against `unknown` and `unavailable`, so
 sensor dropouts and restarts do not produce false events.
 
+## Sensor-silence watchdog
+
+A separate companion blueprint, `blueprints/fridge_sensor_watchdog.yaml`, alerts when a
+monitored sensor stops reporting — a fridge sensor whose battery dies in the cold otherwise
+fails invisibly, since its last value lingers and the door detector simply sees no more
+events. It checks `last_reported` (not `last_changed`), so a steady value never false-alarms.
+It is self-contained: it needs none of the package helpers.
+
+### Watchdog inputs
+
+| Input | Required | Default | Purpose |
+|---|---|---|---|
+| `monitored_sensor` | yes | — | The entity to watch (any domain; typically the fridge sensor) |
+| `silence_hours` | no | 3 | Alert after this many hours with no report |
+| `alarm_actions` | no | none | Runs once when the sensor crosses the silence threshold |
+| `recovery_actions` | no | none | Runs when the sensor reports again after a gap past the threshold |
+
+### Watchdog events
+
+| Event | Fires when | Payload |
+|---|---|---|
+| `fridge_sensor_silent` | No report for `silence_hours` | `entity_id`, `silent_hours`, `last_reported` |
+| `fridge_sensor_recovered` | A report arrives after a gap past the threshold | `entity_id`, `gap_hours` |
+
+Detection is on the alive→silent transition. A still-silent sensor re-alerts ~`silence_hours`
+after each Home Assistant restart (every entity's `last_reported` resets at startup); the one
+uncovered case — reloading the automation while the sensor is already past the threshold —
+self-heals on the next restart.
+
 ## Access guarantee
 
 The project is strictly read-only toward everything it does not own:
