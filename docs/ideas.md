@@ -50,7 +50,7 @@ Threshold stack (sources per line):
 
 Concrete build: integrate minutes-above-4 °C (or 8 °C strict-EU variant) per
 rolling 24 h; warn at 2 h, "check/discard contents" advisory at 4 h. Our existing
-`fridge_temp_critical` (>11 °C/10 min) stays as the acute tier; a long
+`fridge_temp_critical` (>10 °C (50 °F)/30 min) stays as the acute tier; a long
 `sustained_warmup`/ajar event auto-escalates to the contents advisory (the 05-11
 incident: hours at 15–21 °C).
 

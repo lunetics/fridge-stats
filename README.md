@@ -1,10 +1,12 @@
 # fridge-stats
 
-Detect fridge door openings in Home Assistant from a single temperature sensor inside the
-fridge — no door contact sensor required. A door opening warms the interior toward room
-temperature far faster than the compressor cycle ever does; this project turns that physics
-into door events, per-opening duration estimates, a logbook history, usage statistics, and
-alarms for a door left ajar.
+Detect fridge door openings in Home Assistant from two temperature sensors — one inside the
+fridge, one an ambient/room reference — with no door contact sensor. A door opening warms the
+fridge interior toward room temperature far faster than the compressor cycle ever does; this
+project turns that physics into door events, per-opening duration estimates, a logbook history,
+usage statistics, and alarms for a door left ajar. (Detection itself uses only the in-fridge
+sensor; the ambient sensor is required to turn each detected excursion into a season-independent
+duration estimate.)
 
 > [!NOTE]
 > Duration estimates are physics-based approximations. Medians and comparisons hold under
@@ -20,9 +22,11 @@ the full setup is still two files — see [Install](#install).
 
 ## Features
 
-- **Door detection from rise rate**: door events warm the sensor at ≥0.3 °C/min, the
-  compressor cycle at ≤0.06 °C/min — a rate threshold (default 0.10 °C/min) separates them
-  with a 5–12× margin. The temperature falling again closes the event.
+- **Door detection from rise rate**: on the reference fridge, door events warmed the sensor at
+  ≥0.3 °C/min while the compressor cycle stayed ≤0.06 °C/min — a rate threshold (default
+  0.10 °C/min) separates them with a 5–12× margin. Those rates are measured on one fridge, not
+  universal; calibrate your own with `analysis/calibrate_tau.py --rate-check`. The temperature
+  falling again closes the event.
 - **Physical duration model**: `t_open = −τ · ln(1 − ΔT_peak / (T_room − T₀))` — the ambient
   sensor supplies the thermal driving force, so a summer opening and a winter opening of equal
   length score equally.
@@ -35,9 +39,9 @@ the full setup is still two files — see [Install](#install).
   door-state entity.
 - **Statistics layer**: total and daily/weekly/monthly opening counts, accumulated open time,
   7-day median and maximum duration.
-- **Two-tier alarms** with user-defined actions: door-ajar warning (default after 20 min) and
-  a critical over-temperature backstop (default >11 °C for 10 min) that also catches appliance
-  failure and survives restarts.
+- **Two-tier alarms** with user-defined actions: door-ajar warning (default after 15 min) and
+  a critical over-temperature backstop (default >10 °C (50 °F) sustained 30 min) that also
+  catches appliance failure and survives restarts.
 - **Sensor-silence watchdog** (companion blueprint `fridge_sensor_watchdog.yaml`): alerts when
   the fridge sensor stops reporting for a configurable time (default 3 h) — a battery dead in
   the cold or a dropped link otherwise fails invisibly. Uses `last_reported`, so a steady
@@ -92,8 +96,11 @@ Step-by-step instructions, multi-appliance setup, and troubleshooting:
 
 ## Limitations
 
-- Openings shorter than ~20–30 s stay below the sensor's noise and reporting floor —
-  minimum-duration statistics are censored, and detected counts undercount true openings.
+- Openings shorter than ~15–30 s are discarded by the detector's own blip threshold (a
+  cumulative rise below `rise_amp_min`, 0.30 °C, is treated as compressor noise) — a design
+  choice, not a sensor-resolution limit (the sensor itself resolves 0.01 °C). This floor is a
+  physics estimate, not measured (the shortest verified test was 30–60 s); detected counts are
+  a lower bound on true openings, and no door-sensor ground truth exists to quantify the gap.
 - Events fire 1–4 minutes after the physical action (sensor reporting cadence); the
   `opened_at` timestamp is the last pre-rise report.
 - Closely spaced openings merge into episodes; `sustained_warmup` cannot distinguish a door

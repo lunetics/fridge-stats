@@ -98,6 +98,33 @@ Re-run the history calibration after moving the sensor or changing the fridge's 
 layout substantially. Continuous automatic recalibration is planned together with the
 auxiliary door sensor (per-event wall-clock ground truth).
 
+## Calibrate detection thresholds
+
+The rate/amplitude thresholds (`rise_rate_min`, `rise_amp_min`, `fall_confirm`) were **measured
+on the reference fridge**, not derived from first principles. A fridge with a faster compressor
+edge, a different air volume, or a slower-reporting sensor separates door events from the
+compressor cycle at a different rate — the shipped `rise_rate_min` of 0.10 °C/min is a starting
+point, not a physical constant.
+
+`analysis/calibrate_tau.py --rate-check` reads the same recorder history as the τ calibration
+and reports, for your fridge:
+
+- the **compressor ceiling** — a high percentile of your passive (compressor-cycle) rise rates;
+- the **door-event rate** — the rise rates of the detected opening bursts;
+- a **recommended `rise_rate_min`** sitting between the two with margin.
+
+```bash
+export HASS_TOKEN=<long-lived access token>
+python3 analysis/calibrate_tau.py --rate-check --url http://homeassistant.local:8123 \
+    --fridge-entity sensor.your_fridge_temperature
+```
+
+It is read-only: the blueprint's threshold inputs are not script-writable, so paste the
+recommended value into the blueprint automation yourself. If the two populations overlap (the
+door rate is not clearly above the compressor ceiling), your compressor is unusually fast or
+the sensor reports too slowly to separate them by rate alone — fall back to a timed opening and,
+if needed, the auxiliary door sensor.
+
 ## Backfill historical statistics
 
 Run this AFTER calibrating τ — the script reads the tau helper for its duration estimates.
@@ -148,7 +175,8 @@ The blueprint is per-appliance; the package's helpers are one appliance's state.
 |---|---|
 | No events at all | Does the sensor report often enough? Compare its history cadence against the 1–10 min requirement. Verify the automation is enabled and its trace shows runs on temperature reports. |
 | Openings detected but durations look wrong by a constant factor | τ is miscalibrated — run a timed opening. |
-| Short openings never appear | Expected: openings below ~20–30 s are under the detection floor ([limitations](../README.md#limitations)). |
+| Short openings never appear | Expected: openings below ~15–30 s fall under the `rise_amp_min` blip threshold and are discarded ([limitations](../README.md#limitations)). |
 | Alarm fires during normal cooking sessions | Raise `ajar_minutes`, or raise `critical_temp` if your fridge runs warm. |
+| False door events from the compressor cycle | Your compressor edge is faster than the default 0.10 °C/min — run `calibrate_tau.py --rate-check` and raise `rise_rate_min` (see [Calibrate detection thresholds](#calibrate-detection-thresholds)). |
 | Everything classified `sustained_warmup` | The ambient sensor input probably points at a wrong (e.g. outdoor) sensor, making the drive term implausible — verify both sensor inputs. |
 | False openings right after a Home Assistant restart | Not expected — the blueprint guards `unknown`/`unavailable` transitions. If observed, check whether another integration replays stale states for the sensor, and open an issue with the automation trace. |

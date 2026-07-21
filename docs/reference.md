@@ -40,16 +40,22 @@ another appliance.
 | `rise_rate_min` | 0.10 °C/min | Minimum single-segment rise rate to consider a door opening |
 | `rise_amp_min` | 0.30 °C | Minimum total excursion; smaller rises are discarded as `blip` |
 | `fall_confirm` | 0.05 °C | A report this far below the previous one closes the event |
-| `ajar_minutes` | 20 min | Door-open time before the ajar warning fires |
-| `critical_temp` | 11 °C | Sustained (10 min) interior temperature that fires the critical alarm |
+| `ajar_minutes` | 15 min | Door-open time before the ajar warning fires |
+| `critical_temp` | 10 °C (50 °F) | Interior temperature that, sustained 30 min, fires the critical alarm — above the 8 °C (46 °F) EU chilled-food ceiling with a grace window, so routine restocking transients do not trip it |
 | `stale_hours` | 6 h | Closes arriving later than this after the opening are discarded (`stale_reset`) — self-heal after pausing the automation mid-event |
+
+> The rate/amplitude defaults (`rise_rate_min`, `rise_amp_min`, `fall_confirm`) were
+> **measured on the reference fridge**, not derived from first principles — a fridge with a
+> faster compressor or a slower-reporting sensor needs different values. Compute your own with
+> `analysis/calibrate_tau.py --rate-check` (see
+> [installation.md](installation.md#calibrate-detection-thresholds)).
 
 ### Alarm actions
 
 | Input | Default | Runs when |
 |---|---|---|
 | `warn_actions` | none | Door considered open/ajar for `ajar_minutes` |
-| `critical_actions` | none | Interior above `critical_temp` for 10 minutes |
+| `critical_actions` | none | Interior above `critical_temp` for 30 minutes |
 
 ## Entities (package)
 
@@ -89,7 +95,7 @@ All events fire on the Home Assistant event bus; consume them with
 | `fridge_door_opened` | A qualifying temperature rise starts | `t0`, `t_room`, `opened_at`, `source` |
 | `fridge_door_closed` | Temperature falls again after an opening | `duration_s`, `class`, `dt_peak`, `t0`, `peak`, `t_room`, `wall_clock_s`, `source` |
 | `fridge_door_ajar` | Door state on for `ajar_minutes` | `opened_at`, `current_temp` |
-| `fridge_temp_critical` | Interior above `critical_temp` for 10 min | `current_temp` |
+| `fridge_temp_critical` | Interior above `critical_temp` for 30 min | `current_temp` |
 | `fridge_aux_trigger` | Auxiliary sensor turns on | `entity_id`, `at` |
 
 ## Event classes
@@ -102,7 +108,7 @@ Assigned when an event closes; stored in `helper_last_class` and the
 | `quick_grab` | Estimated duration < 40 s | τ model |
 | `normal_grab` | 40–90 s | τ model |
 | `extended_open` | > 90 s | τ model |
-| `sustained_warmup` | Wall-clock open ≥ 25 min or ΔT ≥ 2.5 °C — door ajar, warm food inserted, or rapid repeated access | Wall clock (the τ model does not apply to this regime) |
+| `sustained_warmup` | Wall-clock open ≥ `ajar_minutes` (default 15 min) or ΔT ≥ 2.5 °C — door ajar, warm food inserted, or rapid repeated access | Wall clock (the τ model does not apply to this regime) |
 | `blip` | Total rise below `rise_amp_min` | Discarded; not counted or logged |
 | `stale_reset` | Close arrived more than `stale_hours` after the recorded opening (automation paused mid-event, sensor removed) | Discarded; state reset, logbook note, not counted |
 
@@ -119,7 +125,7 @@ The blueprint runs in `queued` mode so sensor reports are processed strictly in 
    ends the open state silently (`blip`).
 3. **Ajar**: the door state stays on for `ajar_minutes` → `fridge_door_ajar` + warn actions.
 4. **Critical backstop**: independent of door state, interior above `critical_temp` for
-   10 minutes → `fridge_temp_critical` + critical actions. Restart-safe because the
+   30 minutes → `fridge_temp_critical` + critical actions. Restart-safe because the
    `numeric_state` condition re-arms after a restart while the temperature stays high.
 
 All temperature branches guard both trigger states against `unknown` and `unavailable`, so

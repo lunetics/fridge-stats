@@ -8,8 +8,8 @@ Reference facts (thresholds, entities, payloads) live in [reference.md](referenc
 
 A fridge's interior temperature is a compressor sawtooth: slow warming while the compressor
 rests, faster cooling while it runs. In the reference installation the band is roughly
-4.3–5.9 °C with a ~45-minute period, and the passive warming edge never exceeds
-~0.06 °C/min.
+4.3–5.9 °C (40–43 °F) with a ~45-minute period, and the passive warming edge never exceeds
+~0.06 °C/min. These figures are measured on one fridge, not universal constants.
 
 A door opening injects room air. The sensed temperature then rises at ≥0.3 °C/min — a 5–12×
 rate separation from the compressor edge. This separation, not any absolute threshold, is
@@ -68,14 +68,24 @@ reference installation (34,000 fridge samples, 11,000 ambient samples, 292 detec
 
 ### The door-ajar case
 
-One user-confirmed incident (door left open at a 2–6 cm crack) provides a ground-truth test
-of the regime split. The interior climbed monotonically from 6.3 °C to 20.9 °C over 163
-minutes and turned to steady decline the minute the door was closed. An exponential fit gives
-τ_ajar ≈ 62 min with an asymptote 1.8 K below room temperature — proof the compressor was
-running against the leak (a switched-off fridge equilibrates at room temperature). Buoyancy
-counterflow through a vertical slot, `Q = (C_d/3)·w·H·√(g·H·ΔT/T̄)`, predicts 1.3–4.9 h to
-reach that temperature for a 2–6 cm crack with realistic contents — the observed 2.7 h sits
-inside the band, and the fitted τ back-implies a 4–6 cm gap, matching the reported crack.
+One incident is *qualitatively consistent* with a door left ajar — a plausibility check, not
+independent ground truth. The interior climbed monotonically from 6.3 °C to 20.9 °C (43 °F to
+70 °F) over 163 minutes and turned to steady decline the minute the door was closed. An
+exponential fit gives τ_ajar ≈ 62 min with an asymptote 1.8 K below room temperature — the
+compressor was running against the leak (a switched-off fridge equilibrates at room
+temperature). Buoyancy counterflow through a vertical slot, `Q = (C_d/3)·w·H·√(g·H·ΔT/T̄)`,
+predicts 1.3–4.9 h to reach that temperature for a 2–6 cm crack with realistic contents — the
+observed 2.7 h sits inside the band, and the fitted τ back-implies a 4–6 cm gap.
+
+Read this honestly, though: the "2–6 cm crack" is the user's own recollection, given roughly
+two months after the fact, with no door sensor, photo, or contemporaneous log — an assumption,
+not a measurement. And it is circular — duration, τ_ajar, and the back-implied gap width are
+all derived from the *same single temperature curve* the model produces, so the "match" is the
+model agreeing with itself inside a wide, memory-based range. What this genuinely demonstrates
+is internal self-consistency: the curve's shape (monotonic rise, kink at close, sub-room
+asymptote) and its order-of-magnitude agreement with buoyancy physics hold together. It does
+**not** validate the regime split against an external reference — that would need an actual
+door sensor (the planned aux input).
 
 ## Design decisions
 
@@ -96,9 +106,12 @@ inside the band, and the fitted τ back-implies a 4–6 cm gap, matching the rep
 
 ## Known limitations
 
-- **Censored minimum**: an opening produces a sensed excursion of roughly
-  `0.01 °C/s × drive × seconds`; below ~20–30 s it drowns in sensor resolution and reporting
-  deadband. Counted openings are therefore a lower bound, biased toward longer events.
+- **Censored minimum**: a short opening produces only a small cumulative rise; below ~15–30 s
+  it falls under the detector's own `rise_amp_min` (0.30 °C) blip threshold and is discarded.
+  This is a design choice, not a hardware limit — the sensor resolves 0.01 °C, far finer than
+  the floor. The floor is a physics estimate, never tested below 30 s; counted openings are a
+  lower bound, biased toward longer events, with no independent ground truth (a door sensor) to
+  quantify the undercount.
 - **Merging**: openings separated by less than the reporting interval merge into one event;
   cooking sessions become episodes.
 - **Ambiguity of sustained warm-ups**: a monotone half-hour warming is equally consistent
