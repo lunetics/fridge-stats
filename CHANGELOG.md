@@ -3,6 +3,16 @@
 All notable changes to this project are documented in this file. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.2] - 2026-07-21
+
+### Changed
+
+- Troubleshooting docs: added the false door-ajar / over-long-opening symptom — a
+  compressor-off warming ramp misread as an opening that never registers a close until
+  the next cooling cycle — with the `calibrate_tau.py --rate-check` + `rise_rate_min`
+  remedy, and extended the sensor-reposition note to cover `rise_rate_min` recalibration
+  in addition to τ.
+
 ## [0.1.1] - 2026-07-21
 
 ### Added
