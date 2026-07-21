@@ -3,6 +3,41 @@
 All notable changes to this project are documented in this file. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.1] - 2026-07-21
+
+### Added
+
+- Sensor-silence watchdog blueprint (`fridge_sensor_watchdog`): alerts when the
+  monitored sensor stops reporting (dead battery, dropped link) and, optionally, again
+  on recovery. Uses `last_reported`, so a steady-but-healthy sensor never false-alarms.
+- `calibrate_tau.py --rate-check`: recommends `rise_rate_min` from the measured
+  separation between compressor and door-opening rise rates (always read-only).
+- English (canonical) and German (`.de.yaml`) variants of both blueprints and the
+  package; `deploy.sh --lang en|de` selects the entity-id set to deploy.
+- `docs/conventions.md`: °C-first temperature notation convention.
+- My Home Assistant one-click blueprint import badge in the README.
+
+### Changed
+
+- Recalibrated default alarm thresholds: door-ajar warning 20 → 15 min, critical
+  over-temperature 11 → 10 °C held 10 → 30 min; `sustained_warmup` classification
+  coupled to the `ajar_minutes` input instead of a hard-coded 25 min.
+- Honest documentation: reference-fridge rise rates are labelled measured values, not
+  physical constants, with calibration pointers; the ambient sensor is documented as a
+  required input.
+- Examples use a placeholder fridge sensor id instead of the author's real entity.
+
+### Fixed
+
+- Watchdog: guard the trigger/action race so a sensor that reports in the gap between
+  the silence trigger and the queued action no longer raises a false alarm.
+- Backfill `--seed`: the seeded last-event class now applies both legs of the live
+  `sustained_warmup` test (wall-clock ≥ `ajar_minutes` **or** peak rise ≥ 2.5 °C) and
+  follows the deployed package's entity-id language variant.
+- `calibrate_tau.py --rate-check`: isolated door rises that never resolve to a full
+  burst are kept out of the compressor population, so they can no longer inflate the
+  compressor ceiling and push the recommended `rise_rate_min` above real door rates.
+
 ## [0.1.0] - 2026-07-21
 
 ### Added
