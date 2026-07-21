@@ -147,10 +147,11 @@ def recorder_events(base, token, fridge, ambient, start, end, tau):
                 ratio = d_t / (tr - t0v)
                 if d_t >= WARMUP_DT or ratio >= WARMUP_RATIO:
                     # sustained warm-up (loading, searching, ajar): counted like the
-                    # live blueprint — one opening with wall-clock duration
-                    events.append((T[s_idx], max(peak_t - T[s_idx], 60.0)))
+                    # live blueprint — one opening with wall-clock duration. Carry d_t
+                    # (peak rise) so --seed can apply the blueprint's 2.5 °C leg too.
+                    events.append((T[s_idx], max(peak_t - T[s_idx], 60.0), d_t))
                 elif 0 < ratio < RATIO_MAX:
-                    events.append((T[s_idx], -tau * math.log(1 - ratio)))
+                    events.append((T[s_idx], -tau * math.log(1 - ratio), d_t))
             j = k + 1
         else:
             j += 1
@@ -205,9 +206,9 @@ async def lts_events(ws, fridge, ambient, start, end, tau, margin):
             # far closer to real accumulated open time than the episode span.
             r = min(ratio, 0.94) if ratio is not None else None
             dur = -tau * math.log(1 - r) if r and r > 0 else 600.0
-            events.append((ep[0][0] / 1000, dur))
+            events.append((ep[0][0] / 1000, dur, d_t))
         elif ratio is not None and 0 < ratio < RATIO_MAX:
-            events.append((ts / 1000, -tau * math.log(1 - ratio)))
+            events.append((ts / 1000, -tau * math.log(1 - ratio), d_t))
 
     for i, (ts, mn, me, mx) in enumerate(rows):
         if flags[i]:
@@ -221,7 +222,7 @@ async def lts_events(ws, fridge, ambient, start, end, tau, margin):
 
 def build_rows(events, until):
     buck = defaultdict(list)
-    for t, d in events:
+    for t, d, *_ in events:
         h = datetime.fromtimestamp(t, timezone.utc).replace(minute=0, second=0, microsecond=0)
         buck[h].append(d)
     cum_n, cum_s = 0, 0.0
@@ -318,7 +319,7 @@ async def amain():
         count_rows, secs_rows, dur_rows, total_n, total_s = build_rows(events, now)
 
         monthly = defaultdict(lambda: [0, 0.0])
-        for t, d in events:
+        for t, d, *_ in events:
             m = datetime.fromtimestamp(t, timezone.utc).astimezone().strftime('%Y-%m')
             monthly[m][0] += 1
             monthly[m][1] += d
@@ -349,7 +350,7 @@ async def amain():
         if args.seed:
             local_now = datetime.now().astimezone()
             def since_count(dt0):
-                sel = [(t, d) for t, d in events
+                sel = [(t, d) for t, d, *_ in events
                        if datetime.fromtimestamp(t, timezone.utc).astimezone() >= dt0]
                 return len(sel), round(sum(d for _, d in sel))
             today0 = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -370,12 +371,16 @@ async def amain():
                               'service': 'calibrate',
                               'service_data': {'entity_id': ent, 'value': str(val)}})
             if events:
-                d_last = events[-1][1]
-                # Match the blueprint's sustained_warmup wall-clock leg (--ajar-minutes,
-                # default 15). NOTE: d_last is the reconstructed duration, an approximation
-                # of the live wall_s the blueprint actually thresholds — so the seeded class
-                # is a best-effort match for this single cosmetic helper value, not a guarantee.
-                cls = ('sustained_warmup' if d_last >= args.ajar_minutes * 60 else
+                _, d_last, dt_last = events[-1]
+                # Match BOTH legs of the blueprint's sustained_warmup test
+                # (sustained = wall_s >= ajar_minutes*60 or d_t >= 2.5 °C): the
+                # wall-clock leg via --ajar-minutes (default 15) and the amplitude
+                # leg via the reconstructed peak rise dt_last. NOTE: d_last is the
+                # reconstructed duration, an approximation of the live wall_s — so
+                # the seeded class is still a best-effort match for this single
+                # cosmetic helper value, not a guarantee.
+                cls = ('sustained_warmup'
+                       if d_last >= args.ajar_minutes * 60 or dt_last >= WARMUP_DT else
                        'quick_grab' if d_last < 40 else
                        'normal_grab' if d_last <= 90 else 'extended_open')
                 await ws.cmd({'type': 'call_service', 'domain': 'input_number',

@@ -89,8 +89,20 @@ def _segments(fridge):
 
 
 def _burst_seg_ids(segs, V):
-    """Indices into `segs` inside a qualifying door-opening burst (fast run >= AMP_MIN)."""
-    in_burst = set()
+    """Classify segment indices by fast-rise membership.
+
+    Returns (in_burst, fast_run):
+      in_burst  — segments inside a fast run whose cumulative rise reaches AMP_MIN
+                  (a resolved door-opening burst).
+      fast_run  — every segment inside ANY fast rising run (slope >= SLOPE_MIN),
+                  whether or not it resolved to AMP_MIN.
+    The live blueprint opens a door on a SINGLE fast segment, so an isolated fast
+    rise that never accumulates to AMP_MIN is still a door candidate. Keeping such
+    unresolved fast segments out of the compressor population (via fast_run) stops
+    them from inflating the compressor ceiling and pushing the rate recommendation
+    above real door events.
+    """
+    in_burst, fast_run = set(), set()
     j = 0
     while j < len(segs):
         _, sl, dv, _ = segs[j]
@@ -99,12 +111,13 @@ def _burst_seg_ids(segs, V):
             while (k + 1 < len(segs) and segs[k + 1][0] == segs[k][0] + 1
                    and segs[k + 1][1] >= SLOPE_MIN and segs[k + 1][2] > 0):
                 k += 1
+            fast_run.update(range(j, k + 1))
             if V[segs[k][0] + 1] - V[segs[j][0]] >= AMP_MIN:
                 in_burst.update(range(j, k + 1))
             j = k + 1
         else:
             j += 1
-    return in_burst
+    return in_burst, fast_run
 
 
 def rate_check(fridge):
@@ -116,18 +129,25 @@ def rate_check(fridge):
     the blueprint excludes them), split into door (inside a qualifying burst) vs
     passive (compressor) edges. Recommendation = geometric midpoint of the two.
 
-    Door labels are seeded with the shipped SLOPE_MIN, so on a fridge whose compressor
-    edge is faster than that, some compressor segments leak into the door population.
-    That is not a silent failure: the leaked (slower) segments drag the door floor down
-    onto the compressor ceiling, which trips the overlap branch below ("rate alone
-    separates them poorly") instead of recommending a bad threshold. Confirm with a
-    timed opening when the overlap warning fires.
+    The door population is fast-run bursts (cumulative rise >= AMP_MIN); the compressor
+    population excludes EVERY fast-run segment, resolved or not, so an isolated door
+    rise cannot leak into the compressor edges, inflate the ceiling, and push the
+    recommendation above real door rates.
+
+    Residual limitation: door labels are seeded with the shipped SLOPE_MIN, so on a
+    fridge whose compressor edge is faster than that, some compressor segments leak
+    into the door population. That is not a silent failure: the leaked (slower)
+    segments drag the door floor down onto the compressor ceiling, which trips the
+    overlap branch below ("rate alone separates them poorly") instead of recommending
+    a bad threshold. Confirm with a timed opening when the overlap warning fires.
     """
     segs, V = _segments(fridge)
-    in_burst = _burst_seg_ids(segs, V)
+    in_burst, fast_run = _burst_seg_ids(segs, V)
     door = sorted(segs[k][1] for k in in_burst if segs[k][2] >= SEG_MIN_DV)
+    # Compressor edges: qualifying segments NOT part of any fast rising run (fast_run),
+    # so isolated door rises that never resolved to a burst stay out of this population.
     passive = sorted(s[1] for k, s in enumerate(segs)
-                     if k not in in_burst and s[2] >= SEG_MIN_DV)
+                     if k not in fast_run and s[2] >= SEG_MIN_DV)
     print(f'qualifying segments (single-step rise >= {SEG_MIN_DV} °C): '
           f'{len(passive)} passive (compressor), {len(door)} door')
     if len(passive) < 20:
