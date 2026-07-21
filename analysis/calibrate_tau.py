@@ -115,6 +115,13 @@ def rate_check(fridge):
     rise rates of dv>=0.15 segments (short quantization steps are excluded exactly as
     the blueprint excludes them), split into door (inside a qualifying burst) vs
     passive (compressor) edges. Recommendation = geometric midpoint of the two.
+
+    Door labels are seeded with the shipped SLOPE_MIN, so on a fridge whose compressor
+    edge is faster than that, some compressor segments leak into the door population.
+    That is not a silent failure: the leaked (slower) segments drag the door floor down
+    onto the compressor ceiling, which trips the overlap branch below ("rate alone
+    separates them poorly") instead of recommending a bad threshold. Confirm with a
+    timed opening when the overlap warning fires.
     """
     segs, V = _segments(fridge)
     in_burst = _burst_seg_ids(segs, V)

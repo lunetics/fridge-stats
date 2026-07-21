@@ -108,6 +108,13 @@ actions:
           - variables:
               silent_seconds: >-
                 {{ (now() - states[monitored].last_reported).total_seconds() | round(0) }}
+          # Race zwischen Trigger und Aktion absichern: meldet der Sensor in der Lücke
+          # zwischen dem Feuern des Template-Triggers und diesem gequeueten Lauf, ist
+          # last_reported frisch und er ist nicht wirklich still — abbrechen statt einen
+          # Beinahe-Null-Ausfall zu alarmieren.
+          - if: "{{ silent_seconds | float(0) < (silence_hours | float(3)) * 3600 }}"
+            then:
+              - stop: "Sensor hat zwischen Trigger und Aktion gemeldet — nicht wirklich still"
           - event: fridge_sensor_silent
             event_data:
               entity_id: "{{ monitored }}"
@@ -125,7 +132,12 @@ actions:
               - "{{ true }}"
             then: !input alarm_actions
 
-      # ---- sensor recovered: a fresh valid report after a gap past the threshold ----
+      # ---- Sensor erholt: ein frischer valider Report nach einer Lücke über der Schwelle ----
+      # Best-effort: vergleicht aufeinanderfolgende Reports und kann eine Erholung verpassen,
+      # wenn der Sensor mit identischem Wert+Attributen zurückkommt (kein state_changed) oder
+      # über einen Zwischen-unavailable/unknown-Zustand (der den verglichenen Zeitstempel
+      # zurücksetzt). Der Stille-Alarm oben ist das verlässliche Signal; die Erholung ist eine
+      # Kulanz-Benachrichtigung.
       - conditions:
           - condition: trigger
             id: report

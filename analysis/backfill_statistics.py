@@ -262,6 +262,9 @@ async def amain():
     ap.add_argument('--apply', action='store_true', help='import the statistics')
     ap.add_argument('--seed', action='store_true',
                     help='also set counter/total helpers and calibrate utility meters')
+    ap.add_argument('--ajar-minutes', type=int, default=15,
+                    help='sustained_warmup wall-clock threshold in minutes; match your '
+                         'blueprint ajar_minutes so the seeded last-event class agrees with live')
     args = ap.parse_args()
     if not args.token:
         sys.exit('no token: pass --token or set HASS_TOKEN')
@@ -343,9 +346,11 @@ async def amain():
                               'service_data': {'entity_id': ent, 'value': str(val)}})
             if events:
                 d_last = events[-1][1]
-                # 900 s = the blueprint's default sustained_warmup wall-clock leg
-                # (ajar_minutes = 15 min); keep in sync if that default changes.
-                cls = ('sustained_warmup' if d_last >= 900 else
+                # Match the blueprint's sustained_warmup wall-clock leg (--ajar-minutes,
+                # default 15). NOTE: d_last is the reconstructed duration, an approximation
+                # of the live wall_s the blueprint actually thresholds — so the seeded class
+                # is a best-effort match for this single cosmetic helper value, not a guarantee.
+                cls = ('sustained_warmup' if d_last >= args.ajar_minutes * 60 else
                        'quick_grab' if d_last < 40 else
                        'normal_grab' if d_last <= 90 else 'extended_open')
                 await ws.cmd({'type': 'call_service', 'domain': 'input_number',

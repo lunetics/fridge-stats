@@ -106,6 +106,12 @@ actions:
           - variables:
               silent_seconds: >-
                 {{ (now() - states[monitored].last_reported).total_seconds() | round(0) }}
+          # Guard the trigger/action race: if the sensor reported in the gap between the
+          # template trigger firing and this queued run, last_reported is fresh and it is
+          # not actually silent — abort instead of alarming a near-zero outage.
+          - if: "{{ silent_seconds | float(0) < (silence_hours | float(3)) * 3600 }}"
+            then:
+              - stop: "sensor reported between trigger and action — not actually silent"
           - event: fridge_sensor_silent
             event_data:
               entity_id: "{{ monitored }}"
@@ -124,6 +130,10 @@ actions:
             then: !input alarm_actions
 
       # ---- sensor recovered: a fresh valid report after a gap past the threshold ----
+      # Best-effort: this compares consecutive reports, so it can miss a recovery where the
+      # sensor resumes with an identical value+attributes (no state_changed fires) or via an
+      # intermediate unavailable/unknown state (which resets the compared timestamp). The
+      # silence alarm above is the reliable signal; recovery is a courtesy notification.
       - conditions:
           - condition: trigger
             id: report
