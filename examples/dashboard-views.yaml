@@ -1,10 +1,9 @@
 # Dashboard views for fridge-stats (German + English variant).
 # Copy a view into any dashboard via the raw configuration editor,
 # or use it as a template. Core Lovelace cards only - no HACS needed.
-# NOTE: the two source-sensor entity ids (sensor.eg_kueche_... /
-# sensor.eg_wohnzimmer_...) are the reference installation's - replace
-# them with your own fridge and ambient sensors. The kuhlschrank_* and
-# fridge_* entities are created by the package and match as-is.
+# NOTE: sensor.fridge_temperature is a placeholder for YOUR in-fridge sensor -
+# replace it with your own. The kuhlschrank_* / fridge_* entities are created by
+# the package and match as-is.
 views:
 - title: Kühlschrank
   path: kuehlschrank
@@ -14,7 +13,7 @@ views:
     title: Kühlschrank Temperatur (24 h)
     hours_to_show: 24
     entities:
-    - entity: sensor.eg_kueche_kuehlschrank_temperature
+    - entity: sensor.fridge_temperature
     - entity: input_boolean.fridge_door_open
   - type: entities
     title: Tür-Status
@@ -72,7 +71,7 @@ views:
     title: Fridge temperature (24 h)
     hours_to_show: 24
     entities:
-    - entity: sensor.eg_kueche_kuehlschrank_temperature
+    - entity: sensor.fridge_temperature
       name: Fridge temperature
     - entity: input_boolean.fridge_door_open
       name: Door open (detected)
