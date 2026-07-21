@@ -343,7 +343,9 @@ async def amain():
                               'service_data': {'entity_id': ent, 'value': str(val)}})
             if events:
                 d_last = events[-1][1]
-                cls = ('sustained_warmup' if d_last >= 1500 else
+                # 900 s = the blueprint's default sustained_warmup wall-clock leg
+                # (ajar_minutes = 15 min); keep in sync if that default changes.
+                cls = ('sustained_warmup' if d_last >= 900 else
                        'quick_grab' if d_last < 40 else
                        'normal_grab' if d_last <= 90 else 'extended_open')
                 await ws.cmd({'type': 'call_service', 'domain': 'input_number',

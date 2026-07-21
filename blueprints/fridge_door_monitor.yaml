@@ -1,11 +1,13 @@
 blueprint:
   name: Fridge Door Monitor (temperature-physics based)
   description: >
-    Detects fridge door openings WITHOUT a door contact sensor, purely from the
-    in-fridge temperature signal: a door opening warms the interior toward room
-    temperature much faster (>=0.10 °C/min) than the compressor cycle ever does
-    (<=0.06 °C/min). Opening duration is estimated from first-order mixing
-    physics: t_open = -tau * ln(1 - dT_peak / (T_room - T0)).
+    Detects fridge door openings WITHOUT a door contact sensor, from the in-fridge
+    temperature signal: a door opening warms the interior toward room temperature
+    faster than the compressor cycle does (on the reference fridge, >=0.10 vs
+    <=0.06 °C/min — measured values, not physical constants; tune rise_rate_min for
+    your appliance, see docs). A second, ambient temperature sensor is a REQUIRED
+    input: it provides the room-temperature drive for the duration estimate
+    t_open = -tau * ln(1 - dT_peak / (T_room - T0)).
     Fires fridge_door_opened / fridge_door_closed / fridge_door_ajar events,
     writes logbook entries, maintains counters/durations in helpers (see the
     fridge-stats package, which ships matching helpers as defaults), and runs
@@ -116,8 +118,10 @@ blueprint:
         rise_rate_min:
           name: Minimum rise rate (°C/min)
           description: >
-            Door events rise >=0.3 °C/min, compressor <=0.06 °C/min. Default
-            0.10 sits between with margin.
+            Reference-fridge figures: door events rose >=0.3 °C/min, the compressor
+            edge stayed <=0.06 °C/min, so 0.10 sits between with margin. These are
+            MEASURED on one fridge, not universal — a faster compressor needs a
+            higher value. Calibrate yours: analysis/calibrate_tau.py --rate-check.
           default: 0.10
           selector:
             number: {min: 0.02, max: 0.5, step: 0.01, unit_of_measurement: "°C/min"}
@@ -135,13 +139,16 @@ blueprint:
             number: {min: 0.02, max: 0.5, step: 0.01, unit_of_measurement: "°C"}
         ajar_minutes:
           name: Door-ajar warning after (minutes)
-          default: 20
+          default: 15
           selector:
             number: {min: 5, max: 120, step: 1, unit_of_measurement: min}
         critical_temp:
           name: Critical fridge temperature (°C)
-          description: Sustained (10 min) temperature above this fires the critical alarm.
-          default: 11
+          description: >
+            Interior temperature that, held for 30 min, fires the critical alarm.
+            Default 10 °C = above the EU legal ceiling for chilled food (8 °C) with
+            a grace window, so routine restocking transients do not trip it.
+          default: 10
           selector:
             number: {min: 6, max: 20, step: 0.5, unit_of_measurement: "°C"}
         stale_hours:
@@ -188,6 +195,7 @@ variables:
   rise_amp_min: !input rise_amp_min
   fall_confirm: !input fall_confirm
   stale_hours: !input stale_hours
+  ajar_minutes: !input ajar_minutes
 
 triggers:
   - trigger: state
@@ -202,7 +210,7 @@ triggers:
   - trigger: numeric_state
     entity_id: !input fridge_temp_sensor
     above: !input critical_temp
-    for: "00:10:00"
+    for: "00:30:00"
     id: critical_temp
   - trigger: state
     entity_id: !input aux_open_sensor
@@ -290,7 +298,7 @@ actions:
               ratio: >-
                 {{ (d_t | float(0)) / (drive | float(20))
                    if drive | float(0) > 2 else 0 }}
-              sustained: "{{ wall_s | float(0) >= 1500 or d_t | float(0) >= 2.5 }}"
+              sustained: "{{ wall_s | float(0) >= (ajar_minutes | float(15)) * 60 or d_t | float(0) >= 2.5 }}"
               duration: >-
                 {% if sustained %}{{ wall_s | float(0) | round(0) }}
                 {%- elif 0 < ratio | float(0) < 0.95 -%}
@@ -401,7 +409,7 @@ actions:
               name: Kühlschrank
               message: >-
                 🔴 Innentemperatur kritisch: {{ trigger.to_state.state }} °C
-                seit 10 min (Tür offen vergessen oder Gerätedefekt)
+                seit 30 min (Tür offen vergessen oder Gerätedefekt)
               entity_id: "{{ door_helper }}"
           - if:
               - "{{ true }}"
