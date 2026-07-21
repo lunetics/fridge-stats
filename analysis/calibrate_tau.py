@@ -132,7 +132,10 @@ def rate_check(fridge):
     The door population is fast-run bursts (cumulative rise >= AMP_MIN); the compressor
     population excludes EVERY fast-run segment, resolved or not, so an isolated door
     rise cannot leak into the compressor edges, inflate the ceiling, and push the
-    recommendation above real door rates.
+    recommendation above real door rates. Fast segments that never resolved to a burst
+    are genuinely ambiguous (isolated door start OR fast compressor edge) and join
+    neither population; they are counted and, when they sit at/above a candidate
+    threshold, raise an explicit warning rather than being silently resolved either way.
 
     Residual limitation: door labels are seeded with the shipped SLOPE_MIN, so on a
     fridge whose compressor edge is faster than that, some compressor segments leak
@@ -148,8 +151,25 @@ def rate_check(fridge):
     # so isolated door rises that never resolved to a burst stay out of this population.
     passive = sorted(s[1] for k, s in enumerate(segs)
                      if k not in fast_run and s[2] >= SEG_MIN_DV)
+    # Unresolved fast segments: fast rises (>= SLOPE_MIN) that never accumulated to a full
+    # AMP_MIN burst. They match the live single-segment door-open test yet are ambiguous
+    # (isolated door start OR fast compressor edge), so they belong to NEITHER population.
+    # Surface them and warn when they sit at/above a candidate threshold — a hidden fast
+    # compressor edge there would make the recommendation misread compressor cycles as opens.
+    unresolved = sorted(segs[k][1] for k in (fast_run - in_burst) if segs[k][2] >= SEG_MIN_DV)
     print(f'qualifying segments (single-step rise >= {SEG_MIN_DV} °C): '
-          f'{len(passive)} passive (compressor), {len(door)} door')
+          f'{len(passive)} passive (compressor), {len(door)} door, '
+          f'{len(unresolved)} unresolved fast (ambiguous)')
+
+    def warn_if_ambiguous(threshold):
+        above = [r for r in unresolved if r >= threshold]
+        if above:
+            print(f'\n⚠ {len(above)} unresolved fast segment(s) sit at/above the suggested '
+                  f'{threshold:.2f} °C/min (max {max(unresolved):.2f}). Each never reached a full '
+                  'burst, so it is ambiguous — an isolated door start OR a fast compressor edge. '
+                  'If any are compressor edges this threshold will misread them as openings; '
+                  'confirm with a timed opening or add the auxiliary door sensor before applying.')
+
     if len(passive) < 20:
         sys.exit('too few qualifying passive segments to characterise the compressor — '
                  'extend --days')
@@ -163,6 +183,7 @@ def rate_check(fridge):
         print(f'\nonly {len(door)} door segments detected — too few to characterise door events.')
         print('Use a timed opening (docs/installation.md#calibrate-τ) or extend --days.')
         print(f'\ncompressor ceiling (p95) = {ceil:.2f} °C/min — set rise_rate_min above it.')
+        warn_if_ambiguous(ceil)
         return
 
     dfloor, dmid = pct(door, 10), pct(door, 50)
@@ -174,11 +195,13 @@ def rate_check(fridge):
               f'compressor ceiling (p95 {ceil:.2f}) — rate alone separates them only loosely.')
         print(f'  Tentative rise_rate_min ≈ {rec:.2f} °C/min (compressor p95 × door median); '
               'confirm with a timed opening, and consider the auxiliary door sensor.')
+        warn_if_ambiguous(rec)
         return
 
     rec = math.sqrt(ceil * dfloor)
     print(f'\nrecommended rise_rate_min: {rec:.2f} °C/min  '
           f'(between compressor {ceil:.2f} and door {dfloor:.2f}; shipped default 0.10)')
+    warn_if_ambiguous(rec)
     print("Paste it into the blueprint automation's rise_rate_min input "
           '(blueprint inputs are not script-writable).')
 
