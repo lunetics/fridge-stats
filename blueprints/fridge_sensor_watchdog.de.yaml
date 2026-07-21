@@ -12,7 +12,7 @@ blueprint:
     fridge_sensor_recovered events and runs user-defined alarm/recovery actions.
   domain: automation
   author: lunetics
-  source_url: https://github.com/lunetics/fridge-stats/blob/main/blueprints/fridge_sensor_watchdog.yaml
+  source_url: https://github.com/lunetics/fridge-stats/blob/main/blueprints/fridge_sensor_watchdog.de.yaml
   homeassistant:
     min_version: "2026.6.0"
   input:
@@ -113,11 +113,11 @@ actions:
               last_reported: "{{ states[monitored].last_reported.isoformat() }}"
           - action: logbook.log
             data:
-              name: Fridge watchdog
+              name: Kühlschrank-Watchdog
               message: >-
-                ⚠️ {{ entity_name(monitored) or monitored }} has not reported for
-                {{ (silent_seconds | float(0) / 3600) | round(1) }} h
-                (sensor down?)
+                ⚠️ {{ entity_name(monitored) or monitored }} meldet seit
+                {{ (silent_seconds | float(0) / 3600) | round(1) }} h nichts mehr
+                (Sensor-Ausfall?)
               entity_id: "{{ monitored }}"
           - if:
               - "{{ true }}"
@@ -142,10 +142,10 @@ actions:
               gap_hours: "{{ gap_hours }}"
           - action: logbook.log
             data:
-              name: Fridge watchdog
+              name: Kühlschrank-Watchdog
               message: >-
-                ✅ {{ entity_name(monitored) or monitored }} is reporting again
-                (after {{ gap_hours }} h of silence)
+                ✅ {{ entity_name(monitored) or monitored }} meldet wieder
+                (nach {{ gap_hours }} h Stille)
               entity_id: "{{ monitored }}"
           - if:
               - "{{ true }}"

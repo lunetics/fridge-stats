@@ -59,8 +59,12 @@ another appliance.
 
 ## Entities (package)
 
-File: `package/fridge_stats.yaml`. State helpers store the detector's working state; mirror
-sensors expose it with `state_class` so the recorder keeps long-term statistics.
+File: `package/fridge_stats.yaml` (English, canonical). The German variant
+`package/fridge_stats.de.yaml` is identical logic but names its mirror/statistics/utility-meter
+sensors in German — producing `sensor.kuhlschrank_*` entity ids instead of the `sensor.fridge_*`
+ids below; the `input_*`/`counter` helper ids are the same in both. State helpers store the
+detector's working state; mirror sensors expose it with `state_class` so the recorder keeps
+long-term statistics.
 
 | Entity | Type | Role |
 |---|---|---|
@@ -73,17 +77,17 @@ sensors expose it with `state_class` so the recorder keeps long-term statistics.
 | `input_text.fridge_last_event_class` | helper | Last event class |
 | `counter.fridge_openings_total` | helper | Openings since installation |
 | `input_number.fridge_open_seconds_total` | helper | Accumulated open seconds |
-| `sensor.kuhlschrank_tur_letzte_offnungsdauer` | template mirror | Last duration, `measurement` — event-gated: available only for ~1 h after an opening, so its long-term statistics contain event hours only |
-| `sensor.kuhlschrank_tur_offnungen_gesamt` | template mirror | Opening count, `total_increasing` |
-| `sensor.kuhlschrank_tur_offnungszeit_gesamt` | template mirror | Open seconds, `total_increasing` |
-| `sensor.kuhlschrank_turstatus` | template | `offen`/`geschlossen` plus last class, duration, timestamp as attributes |
-| `sensor.kuhlschrank_offnungsdauer_median_7d` | statistics | Median opening duration over 7 days |
-| `sensor.kuhlschrank_offnungsdauer_max_7d` | statistics | Maximum opening duration over 7 days |
-| `sensor.kuhlschrank_offnungen_heute` / `_woche` / `_monat` | utility_meter | Opening counts per day/week/month |
-| `sensor.kuhlschrank_offnungszeit_heute` / `_monat` | utility_meter | Open time per day/month |
-| `sensor.kuhlschrank_offnungszeit_heute_lesbar` / `_monat_lesbar` / `_gesamt_lesbar` | template display | Human-readable duration strings ("42 s" / "26 min" / "9,9 h") for dashboard rows |
-| `sensor.kuhlschrank_letzte_offnungsdauer_lesbar` | template display | Last duration, human-readable |
-| `sensor.kuhlschrank_offnungsdauer_median_7d_lesbar` / `_max_7d_lesbar` | template display | 7-day median/max, human-readable |
+| `sensor.fridge_door_last_opening_duration` | template mirror | Last duration, `measurement` — event-gated: available only for ~1 h after an opening, so its long-term statistics contain event hours only |
+| `sensor.fridge_door_openings_total` | template mirror | Opening count, `total_increasing` |
+| `sensor.fridge_door_open_time_total` | template mirror | Open seconds, `total_increasing` |
+| `sensor.fridge_door_state` | template | `open`/`closed` plus last class, duration, timestamp as attributes |
+| `sensor.fridge_opening_duration_median_7d` | statistics | Median opening duration over 7 days |
+| `sensor.fridge_opening_duration_max_7d` | statistics | Maximum opening duration over 7 days |
+| `sensor.fridge_openings_today` / `_week` / `_month` | utility_meter | Opening counts per day/week/month |
+| `sensor.fridge_open_time_today` / `_month` | utility_meter | Open time per day/month |
+| `sensor.fridge_open_time_today_readable` / `_month_readable` / `_total_readable` | template display | Human-readable duration strings ("42 s" / "26 min" / "9.9 h") for dashboard rows |
+| `sensor.fridge_last_opening_duration_readable` | template display | Last duration, human-readable |
+| `sensor.fridge_opening_duration_median_7d_readable` / `_max_7d_readable` | template display | 7-day median/max, human-readable |
 
 ## Events
 

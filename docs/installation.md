@@ -38,6 +38,13 @@ Three places take sensor entities — only the first one affects detection:
 
 ## Steps
 
+> [!NOTE]
+> These steps use the English (canonical) files. For the German variant, copy
+> `package/fridge_stats.de.yaml` and the `blueprints/*.de.yaml` files instead (to the same
+> target filenames), or run `deploy.sh --lang de`. The German variant names its mirror sensors
+> in German (`sensor.kuhlschrank_*`); the English one uses `sensor.fridge_*`. Do not switch
+> variants on a running instance — it renames the mirror sensors and orphans their history.
+
 1. Copy the package:
 
    ```

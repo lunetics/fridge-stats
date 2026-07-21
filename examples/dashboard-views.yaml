@@ -1,9 +1,11 @@
 # Dashboard views for fridge-stats (German + English variant).
-# Copy a view into any dashboard via the raw configuration editor,
-# or use it as a template. Core Lovelace cards only - no HACS needed.
-# NOTE: sensor.fridge_temperature is a placeholder for YOUR in-fridge sensor -
-# replace it with your own. The kuhlschrank_* / fridge_* entities are created by
-# the package and match as-is.
+# Copy a view into any dashboard via the raw configuration editor, or use it as a template.
+# Core Lovelace cards only - no HACS needed.
+# NOTE: sensor.fridge_temperature is a placeholder for YOUR in-fridge sensor - replace it.
+# The German view uses the sensor.kuhlschrank_* ids from package/fridge_stats.de.yaml;
+# the English view uses the sensor.fridge_* ids from package/fridge_stats.yaml. Use the view
+# that matches the package variant you deployed. The input_boolean/input_number/input_text
+# helper ids (fridge_*) are identical in both packages.
 views:
 - title: Kühlschrank
   path: kuehlschrank
@@ -78,36 +80,36 @@ views:
   - type: entities
     title: Door status
     entities:
-    - entity: sensor.kuhlschrank_turstatus
+    - entity: sensor.fridge_door_state
       name: Door state
     - entity: input_text.fridge_last_event_class
       name: Last event class
-    - entity: sensor.kuhlschrank_letzte_offnungsdauer_lesbar
+    - entity: sensor.fridge_last_opening_duration_readable
       name: Last opening duration
     - entity: input_number.fridge_tau
       name: Tau (calibration constant)
-    - entity: automation.kuhlschrank_tur_monitor_fridge_stats
+    - entity: automation.fridge_door_monitor
       name: Door monitor automation
   - type: entities
     title: Statistics
     entities:
-    - entity: sensor.kuhlschrank_offnungen_heute
+    - entity: sensor.fridge_openings_today
       name: Openings today
-    - entity: sensor.kuhlschrank_offnungen_woche
+    - entity: sensor.fridge_openings_week
       name: Openings this week
-    - entity: sensor.kuhlschrank_offnungen_monat
+    - entity: sensor.fridge_openings_month
       name: Openings this month
-    - entity: sensor.kuhlschrank_offnungszeit_heute_lesbar
+    - entity: sensor.fridge_open_time_today_readable
       name: Open time today
-    - entity: sensor.kuhlschrank_offnungszeit_monat_lesbar
+    - entity: sensor.fridge_open_time_month_readable
       name: Open time this month
-    - entity: sensor.kuhlschrank_offnungsdauer_median_7d_lesbar
+    - entity: sensor.fridge_opening_duration_median_7d_readable
       name: Median duration (7 d)
-    - entity: sensor.kuhlschrank_offnungsdauer_max_7d_lesbar
+    - entity: sensor.fridge_opening_duration_max_7d_readable
       name: Max duration (7 d)
-    - entity: sensor.kuhlschrank_tur_offnungen_gesamt
+    - entity: sensor.fridge_door_openings_total
       name: Openings total
-    - entity: sensor.kuhlschrank_offnungszeit_gesamt_lesbar
+    - entity: sensor.fridge_open_time_total_readable
       name: Open time total
   - type: statistics-graph
     title: Openings per day (30 d)
@@ -117,7 +119,7 @@ views:
     stat_types:
     - change
     entities:
-    - sensor.kuhlschrank_tur_offnungen_gesamt
+    - sensor.fridge_door_openings_total
   - type: statistics-graph
     title: Avg opening duration per week (year)
     chart_type: line
@@ -126,4 +128,4 @@ views:
     stat_types:
     - mean
     entities:
-    - sensor.kuhlschrank_tur_letzte_offnungsdauer
+    - sensor.fridge_door_last_opening_duration

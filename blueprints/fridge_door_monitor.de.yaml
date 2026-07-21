@@ -16,7 +16,7 @@ blueprint:
     own helper set.
   domain: automation
   author: lunetics
-  source_url: https://github.com/lunetics/fridge-stats/blob/main/blueprints/fridge_door_monitor.yaml
+  source_url: https://github.com/lunetics/fridge-stats/blob/main/blueprints/fridge_door_monitor.de.yaml
   homeassistant:
     min_version: "2026.6.0"  # per-step note: annotations require 2026.6
   input:
@@ -263,10 +263,10 @@ actions:
               source: temperature
           - action: logbook.log
             data:
-              name: Fridge
+              name: Kühlschrank
               message: >-
-                Door opened (rise {{ (trigger.to_state.state | float(0) -
-                trigger.from_state.state | float(0)) | round(2) }} K detected)
+                Tür geöffnet (Anstieg {{ (trigger.to_state.state | float(0) -
+                trigger.from_state.state | float(0)) | round(2) }} K erkannt)
               entity_id: "{{ door_helper }}"
 
       # ---- door CLOSED: temperature falls again while considered open ----
@@ -332,10 +332,10 @@ actions:
                   value: stale_reset
               - action: logbook.log
                 data:
-                  name: Fridge
+                  name: Kühlschrank
                   message: >-
-                    Stale open state discarded (opening allegedly since
-                    {{ states(helper_opened_at) }} — automation paused meanwhile?)
+                    Veralteter Offen-Zustand verworfen (Öffnung angeblich seit
+                    {{ states(helper_opened_at) }} — Automation zwischenzeitlich pausiert?)
                   entity_id: "{{ door_helper }}"
               - stop: "stale open state discarded — not counted"
             note: "Self-heal: a pause while 'open' must not book a days-long duration."
@@ -369,11 +369,11 @@ actions:
               source: temperature
           - action: logbook.log
             data:
-              name: Fridge
+              name: Kühlschrank
               message: >-
-                Door closed — open {{ duration | float(0) | round(0) }} s
+                Tür zu — {{ duration | float(0) | round(0) }} s offen
                 ({{ door_class }}, ΔT {{ d_t | float(0) | round(2) }} K,
-                room {{ troom | float(0) | round(1) }} °C)
+                Raum {{ troom | float(0) | round(1) }} °C)
               entity_id: "{{ door_helper }}"
 
       # ---- door AJAR warning: still "open" after N minutes ----
@@ -387,10 +387,10 @@ actions:
               current_temp: "{{ states(fridge_sensor) }}"
           - action: logbook.log
             data:
-              name: Fridge
+              name: Kühlschrank
               message: >-
-                ⚠️ Door apparently open/ajar since {{ states(helper_opened_at) }}
-                (warning threshold reached)
+                ⚠️ Tür offenbar seit {{ states(helper_opened_at) }} offen/angelehnt
+                (Warnschwelle erreicht)
               entity_id: "{{ door_helper }}"
           - if:
               - "{{ true }}"
@@ -406,10 +406,10 @@ actions:
               current_temp: "{{ trigger.to_state.state }}"
           - action: logbook.log
             data:
-              name: Fridge
+              name: Kühlschrank
               message: >-
-                🔴 Interior temperature critical: {{ trigger.to_state.state }} °C
-                for 30 min (door left open or appliance fault)
+                🔴 Innentemperatur kritisch: {{ trigger.to_state.state }} °C
+                seit 30 min (Tür offen vergessen oder Gerätedefekt)
               entity_id: "{{ door_helper }}"
           - if:
               - "{{ true }}"
@@ -426,6 +426,6 @@ actions:
               at: "{{ now().isoformat() }}"
           - action: logbook.log
             data:
-              name: Fridge
-              message: "Aux sensor triggered ({{ trigger.entity_id }})"
+              name: Kühlschrank
+              message: "Aux-Sensor ausgelöst ({{ trigger.entity_id }})"
               entity_id: "{{ door_helper }}"

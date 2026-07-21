@@ -1,17 +1,16 @@
-# fridge-stats package (English) — state + statistics layer for the Fridge Door Monitor.
+# fridge-stats package — state + statistics layer for the Fridge Door Monitor blueprint.
 # Deliberately source-agnostic: NO reference to any physical sensor lives here.
 # All sensor wiring happens in the blueprint automation instance (fully configurable).
-# German variant: package/fridge_stats.de.yaml (keeps the sensor.kuhlschrank_* ids).
-# Repo: ~/Projekte/homeassistant/fridge-stats (deploy via deploy.sh; edits belong in the repo).
+# Repo: ~/Projekte/homeassistant/fridge-stats (deploy via deploy.sh; edits belong in the repo, not here).
 
 input_boolean:
   fridge_door_open:
-    name: "Fridge door open (detected)"
+    name: "Kühlschrank Tür offen (erkannt)"
     icon: mdi:fridge-alert
 
 input_number:
   fridge_t0:
-    name: "Fridge T0 (before opening)"
+    name: "Kühlschrank T0 (vor Öffnung)"
     min: -10
     max: 30
     step: 0.01
@@ -19,7 +18,7 @@ input_number:
     icon: mdi:thermometer-low
     mode: box
   fridge_troom0:
-    name: "Fridge room temp at opening"
+    name: "Kühlschrank Raumtemp bei Öffnung"
     min: 0
     max: 45
     step: 0.01
@@ -27,7 +26,7 @@ input_number:
     icon: mdi:home-thermometer
     mode: box
   fridge_tau:
-    name: "Fridge tau (calibration constant)"
+    name: "Kühlschrank Tau (Kalibrierkonstante)"
     # no initial: — value must survive restarts (recalibration!); seeded once at deploy
     min: 300
     max: 5400
@@ -36,7 +35,7 @@ input_number:
     icon: mdi:timer-sand
     mode: box
   fridge_last_open_duration:
-    name: "Fridge last opening duration"
+    name: "Kühlschrank letzte Öffnungsdauer"
     min: 0
     max: 86400
     step: 1
@@ -44,7 +43,7 @@ input_number:
     icon: mdi:timer-outline
     mode: box
   fridge_open_seconds_total:
-    name: "Fridge open seconds total"
+    name: "Kühlschrank Öffnungssekunden gesamt"
     min: 0
     max: 100000000
     step: 1
@@ -54,19 +53,19 @@ input_number:
 
 input_datetime:
   fridge_opened_at:
-    name: "Fridge opened at"
+    name: "Kühlschrank geöffnet um"
     has_date: true
     has_time: true
     icon: mdi:clock-start
 
 input_text:
   fridge_last_event_class:
-    name: "Fridge last event class"
+    name: "Kühlschrank letzte Ereignisklasse"
     icon: mdi:tag-outline
 
 counter:
   fridge_openings_total:
-    name: "Fridge openings total"
+    name: "Kühlschrank Öffnungen gesamt"
     icon: mdi:counter
     restore: true
 
@@ -76,8 +75,8 @@ counter:
 # Helpers would not be version-controlled.)
 template:
   - sensor:
-      - name: "Fridge door last opening duration"
-        unique_id: fridge_door_last_opening_duration
+      - name: "Kühlschrank Tür letzte Öffnungsdauer"
+        unique_id: fridge_door_last_open_duration
         unit_of_measurement: "s"
         device_class: duration
         state_class: measurement
@@ -91,41 +90,41 @@ template:
              and has_value('input_datetime.fridge_opened_at')
              and (now().timestamp() - state_attr('input_datetime.fridge_opened_at', 'timestamp') | float(0)) < 3600 }}
         state: "{{ states('input_number.fridge_last_open_duration') | float(0) | round(0) }}"
-      - name: "Fridge door openings total"
+      - name: "Kühlschrank Tür Öffnungen gesamt"
         unique_id: fridge_door_openings_total
         state_class: total_increasing
         icon: mdi:counter
         availability: "{{ has_value('counter.fridge_openings_total') }}"
         state: "{{ states('counter.fridge_openings_total') | int(0) }}"
-      - name: "Fridge door open time total"
-        unique_id: fridge_door_open_time_total
+      - name: "Kühlschrank Tür Öffnungszeit gesamt"
+        unique_id: fridge_door_open_seconds_total
         unit_of_measurement: "s"
         device_class: duration
         state_class: total_increasing
         icon: mdi:sigma
         availability: "{{ has_value('input_number.fridge_open_seconds_total') }}"
         state: "{{ states('input_number.fridge_open_seconds_total') | float(0) | round(0) }}"
-      # Readable duration displays: string states ("42 s" / "26 min" / "9.9 h")
+      # Readable duration displays: string states ("42 s" / "26 min" / "9,9 h")
       # for dashboard rows - display-only, no unit/state_class.
-      - name: "Fridge open time today readable"
+      - name: "Kühlschrank Öffnungszeit heute lesbar"
         unique_id: fridge_open_time_today_readable
         icon: mdi:clock-outline
-        availability: "{{ has_value('sensor.fridge_open_time_today') }}"
+        availability: "{{ has_value('sensor.kuhlschrank_offnungszeit_heute') }}"
         state: >-
-          {% set s = states('sensor.fridge_open_time_today') | float(0) %}
+          {% set s = states('sensor.kuhlschrank_offnungszeit_heute') | float(0) %}
           {% if s < 60 %}{{ s | round(0) | int }} s
           {%- elif s < 3600 %}{{ (s / 60) | round(0) | int }} min
-          {%- else %}{{ (s / 3600) | round(1) }} h{% endif %}
-      - name: "Fridge open time month readable"
+          {%- else %}{{ ((s / 3600) | round(1)) | string | replace('.', ',') }} h{% endif %}
+      - name: "Kühlschrank Öffnungszeit Monat lesbar"
         unique_id: fridge_open_time_month_readable
         icon: mdi:clock-outline
-        availability: "{{ has_value('sensor.fridge_open_time_month') }}"
+        availability: "{{ has_value('sensor.kuhlschrank_offnungszeit_monat') }}"
         state: >-
-          {% set s = states('sensor.fridge_open_time_month') | float(0) %}
+          {% set s = states('sensor.kuhlschrank_offnungszeit_monat') | float(0) %}
           {% if s < 60 %}{{ s | round(0) | int }} s
           {%- elif s < 3600 %}{{ (s / 60) | round(0) | int }} min
-          {%- else %}{{ (s / 3600) | round(1) }} h{% endif %}
-      - name: "Fridge open time total readable"
+          {%- else %}{{ ((s / 3600) | round(1)) | string | replace('.', ',') }} h{% endif %}
+      - name: "Kühlschrank Öffnungszeit gesamt lesbar"
         unique_id: fridge_open_time_total_readable
         icon: mdi:sigma
         availability: "{{ has_value('input_number.fridge_open_seconds_total') }}"
@@ -133,60 +132,60 @@ template:
           {% set s = states('input_number.fridge_open_seconds_total') | float(0) %}
           {% if s < 60 %}{{ s | round(0) | int }} s
           {%- elif s < 3600 %}{{ (s / 60) | round(0) | int }} min
-          {%- else %}{{ (s / 3600) | round(1) }} h{% endif %}
-      - name: "Fridge last opening duration readable"
-        unique_id: fridge_last_opening_duration_readable
+          {%- else %}{{ ((s / 3600) | round(1)) | string | replace('.', ',') }} h{% endif %}
+      - name: "Kühlschrank letzte Öffnungsdauer lesbar"
+        unique_id: fridge_last_duration_readable
         icon: mdi:door-open
         availability: "{{ has_value('input_number.fridge_last_open_duration') }}"
         state: >-
           {% set s = states('input_number.fridge_last_open_duration') | float(0) %}
           {% if s < 60 %}{{ s | round(0) | int }} s
           {%- elif s < 3600 %}{{ (s / 60) | round(0) | int }} min
-          {%- else %}{{ (s / 3600) | round(1) }} h{% endif %}
-      - name: "Fridge opening duration median 7d readable"
-        unique_id: fridge_opening_duration_median_7d_readable
+          {%- else %}{{ ((s / 3600) | round(1)) | string | replace('.', ',') }} h{% endif %}
+      - name: "Kühlschrank Öffnungsdauer Median 7d lesbar"
+        unique_id: fridge_duration_median_7d_readable
         icon: mdi:calculator-variant-outline
-        availability: "{{ has_value('sensor.fridge_opening_duration_median_7d') }}"
+        availability: "{{ has_value('sensor.kuhlschrank_offnungsdauer_median_7d') }}"
         state: >-
-          {% set s = states('sensor.fridge_opening_duration_median_7d') | float(0) %}
+          {% set s = states('sensor.kuhlschrank_offnungsdauer_median_7d') | float(0) %}
           {% if s < 60 %}{{ s | round(0) | int }} s
           {%- elif s < 3600 %}{{ (s / 60) | round(0) | int }} min
-          {%- else %}{{ (s / 3600) | round(1) }} h{% endif %}
-      - name: "Fridge opening duration max 7d readable"
-        unique_id: fridge_opening_duration_max_7d_readable
+          {%- else %}{{ ((s / 3600) | round(1)) | string | replace('.', ',') }} h{% endif %}
+      - name: "Kühlschrank Öffnungsdauer Max 7d lesbar"
+        unique_id: fridge_duration_max_7d_readable
         icon: mdi:calculator-variant
-        availability: "{{ has_value('sensor.fridge_opening_duration_max_7d') }}"
+        availability: "{{ has_value('sensor.kuhlschrank_offnungsdauer_max_7d') }}"
         state: >-
-          {% set s = states('sensor.fridge_opening_duration_max_7d') | float(0) %}
+          {% set s = states('sensor.kuhlschrank_offnungsdauer_max_7d') | float(0) %}
           {% if s < 60 %}{{ s | round(0) | int }} s
           {%- elif s < 3600 %}{{ (s / 60) | round(0) | int }} min
-          {%- else %}{{ (s / 3600) | round(1) }} h{% endif %}
-      - name: "Fridge door state"
+          {%- else %}{{ ((s / 3600) | round(1)) | string | replace('.', ',') }} h{% endif %}
+      - name: "Kühlschrank Türstatus"
         unique_id: fridge_door_state
         icon: >-
           {{ 'mdi:fridge-alert' if is_state('input_boolean.fridge_door_open', 'on')
              else 'mdi:fridge' }}
         state: >-
-          {% if is_state('input_boolean.fridge_door_open', 'on') %}open
-          {%- else %}closed{% endif %}
+          {% if is_state('input_boolean.fridge_door_open', 'on') %}offen
+          {%- else %}geschlossen{% endif %}
         attributes:
-          last_class: "{{ states('input_text.fridge_last_event_class') }}"
-          last_duration_s: "{{ states('input_number.fridge_last_open_duration') }}"
-          opened_at: "{{ states('input_datetime.fridge_opened_at') }}"
+          letzte_klasse: "{{ states('input_text.fridge_last_event_class') }}"
+          letzte_dauer_s: "{{ states('input_number.fridge_last_open_duration') }}"
+          geoeffnet_um: "{{ states('input_datetime.fridge_opened_at') }}"
 
 sensor:
   - platform: statistics
-    name: "Fridge opening duration median 7d"
-    unique_id: fridge_opening_duration_median_7d
-    entity_id: sensor.fridge_door_last_opening_duration
+    name: "Kühlschrank Öffnungsdauer Median 7d"
+    unique_id: fridge_open_duration_median_7d
+    entity_id: sensor.kuhlschrank_tur_letzte_offnungsdauer
     state_characteristic: median
     sampling_size: 500
     max_age:
       days: 7
   - platform: statistics
-    name: "Fridge opening duration max 7d"
-    unique_id: fridge_opening_duration_max_7d
-    entity_id: sensor.fridge_door_last_opening_duration
+    name: "Kühlschrank Öffnungsdauer Max 7d"
+    unique_id: fridge_open_duration_max_7d
+    entity_id: sensor.kuhlschrank_tur_letzte_offnungsdauer
     state_characteristic: value_max
     sampling_size: 500
     max_age:
@@ -194,22 +193,22 @@ sensor:
 
 utility_meter:
   fridge_openings_daily:
-    name: "Fridge openings today"
-    source: sensor.fridge_door_openings_total
+    name: "Kühlschrank Öffnungen heute"
+    source: sensor.kuhlschrank_tur_offnungen_gesamt
     cycle: daily
   fridge_openings_weekly:
-    name: "Fridge openings week"
-    source: sensor.fridge_door_openings_total
+    name: "Kühlschrank Öffnungen Woche"
+    source: sensor.kuhlschrank_tur_offnungen_gesamt
     cycle: weekly
   fridge_openings_monthly:
-    name: "Fridge openings month"
-    source: sensor.fridge_door_openings_total
+    name: "Kühlschrank Öffnungen Monat"
+    source: sensor.kuhlschrank_tur_offnungen_gesamt
     cycle: monthly
   fridge_open_time_daily:
-    name: "Fridge open time today"
-    source: sensor.fridge_door_open_time_total
+    name: "Kühlschrank Öffnungszeit heute"
+    source: sensor.kuhlschrank_tur_offnungszeit_gesamt
     cycle: daily
   fridge_open_time_monthly:
-    name: "Fridge open time month"
-    source: sensor.fridge_door_open_time_total
+    name: "Kühlschrank Öffnungszeit Monat"
+    source: sensor.kuhlschrank_tur_offnungszeit_gesamt
     cycle: monthly
