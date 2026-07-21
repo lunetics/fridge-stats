@@ -10,7 +10,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$CFG/packages" "$CFG/blueprints/automation/fridge_stats"
 cp "$HERE/package/fridge_stats.yaml" "$CFG/packages/fridge_stats.yaml"
 cp "$HERE/blueprints/fridge_door_monitor.yaml" "$CFG/blueprints/automation/fridge_stats/fridge_door_monitor.yaml"
-echo "deployed: packages/fridge_stats.yaml + blueprints/automation/fridge_stats/fridge_door_monitor.yaml"
+cp "$HERE/blueprints/fridge_sensor_watchdog.yaml" "$CFG/blueprints/automation/fridge_stats/fridge_sensor_watchdog.yaml"
+echo "deployed: packages/fridge_stats.yaml + blueprints/automation/fridge_stats/{fridge_door_monitor,fridge_sensor_watchdog}.yaml"
 
 grep -q 'packages: !include_dir_named packages' "$CFG/configuration.yaml" \
   && echo "configuration.yaml: packages include present" \

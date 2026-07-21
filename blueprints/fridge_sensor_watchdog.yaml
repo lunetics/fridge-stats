@@ -1,0 +1,152 @@
+blueprint:
+  name: Sensor Silence Watchdog (fridge-stats)
+  description: >
+    Liveness watchdog for a reporting sensor: alerts when the monitored entity
+    has produced NO fresh report for longer than a configurable time, and
+    optionally again when it recovers. Companion to the Fridge Door Monitor — a
+    fridge/freezer temperature sensor that goes silent (battery dead in the cold,
+    a dropped Zigbee link) otherwise fails invisibly: its last value lingers and
+    the door detector simply stops seeing events. The check uses last_reported,
+    NOT last_changed, so a healthy-but-steady sensor (a fridge holding a constant
+    temperature) never false-alarms. Fires fridge_sensor_silent /
+    fridge_sensor_recovered events and runs user-defined alarm/recovery actions.
+  domain: automation
+  author: lunetics
+  source_url: https://github.com/lunetics/fridge-stats/blob/main/blueprints/fridge_sensor_watchdog.yaml
+  homeassistant:
+    min_version: "2026.6.0"
+  input:
+    sensor:
+      name: Monitored sensor
+      icon: mdi:radar
+      input:
+        monitored_sensor:
+          name: Sensor to watch
+          description: >
+            The entity whose liveness is monitored — typically the in-fridge
+            temperature sensor. Any entity works; the check is report-based, not
+            value-based.
+          selector:
+            entity: {}
+    settings:
+      name: Settings
+      icon: mdi:cog
+      collapsed: true
+      input:
+        silence_hours:
+          name: Silence threshold (hours)
+          description: >
+            Alert when the sensor has not reported for at least this many hours.
+            A healthy fridge multisensor reports every 1–10 min, so 3 h clears
+            normal gaps while still catching a same-day failure.
+          default: 3
+          selector:
+            number: {min: 1, max: 48, step: 1, unit_of_measurement: h, mode: box}
+    actions:
+      name: Alarm actions
+      icon: mdi:alarm-light
+      input:
+        alarm_actions:
+          name: Silence alarm actions
+          description: Runs once when the sensor crosses the silence threshold.
+          default: []
+          selector:
+            action: {}
+        recovery_actions:
+          name: Recovery actions (optional)
+          description: >
+            Runs when the sensor reports again after having been silent past the
+            threshold. Leave empty for none.
+          default: []
+          selector:
+            action: {}
+
+mode: queued
+max: 10
+max_exceeded: silent
+
+# trigger_variables feeds the templated silence trigger (limited templates: plain
+# !input values only, no state access). variables mirrors them for conditions/actions.
+trigger_variables:
+  monitored: !input monitored_sensor
+  silence_hours: !input silence_hours
+
+variables:
+  monitored: !input monitored_sensor
+  silence_hours: !input silence_hours
+
+triggers:
+  # No report within the threshold. last_reported (not last_changed) so a steady
+  # value does not read as silence; now() makes HA re-evaluate every minute.
+  # Fires on the false->true TRANSITION (sensor alive -> goes silent), which is
+  # the target case (a sensor dying mid-operation). After an HA restart every
+  # entity's last_reported resets to startup time, so a still-dead sensor crosses
+  # the threshold again ~silence_hours later and re-alerts. The one uncovered case
+  # is reloading this automation (no HA restart) while the sensor is ALREADY past
+  # the threshold: the template is already true, so there is no transition to fire
+  # on. It self-heals on the next HA restart.
+  - trigger: template
+    id: went_silent
+    value_template: >-
+      {{ states[monitored] is not none
+         and (now() - states[monitored].last_reported).total_seconds()
+             > (silence_hours | float(3)) * 3600 }}
+  # Any report: the recovered branch decides whether it followed a real outage.
+  - trigger: state
+    entity_id: !input monitored_sensor
+    id: report
+
+actions:
+  - choose:
+      # ---- sensor went silent: no fresh report within the threshold ----
+      - conditions:
+          - condition: trigger
+            id: went_silent
+        sequence:
+          - variables:
+              silent_seconds: >-
+                {{ (now() - states[monitored].last_reported).total_seconds() | round(0) }}
+          - event: fridge_sensor_silent
+            event_data:
+              entity_id: "{{ monitored }}"
+              silent_hours: "{{ (silent_seconds | float(0) / 3600) | round(1) }}"
+              last_reported: "{{ states[monitored].last_reported.isoformat() }}"
+          - action: logbook.log
+            data:
+              name: Kühlschrank-Watchdog
+              message: >-
+                ⚠️ {{ entity_name(monitored) or monitored }} meldet seit
+                {{ (silent_seconds | float(0) / 3600) | round(1) }} h nichts mehr
+                (Sensor-Ausfall?)
+              entity_id: "{{ monitored }}"
+          - if:
+              - "{{ true }}"
+            then: !input alarm_actions
+
+      # ---- sensor recovered: a fresh valid report after a gap past the threshold ----
+      - conditions:
+          - condition: trigger
+            id: report
+          - >-
+            {{ trigger.from_state is not none
+               and trigger.to_state.state not in ['unavailable', 'unknown']
+               and (trigger.to_state.last_reported - trigger.from_state.last_reported).total_seconds()
+                   > (silence_hours | float(3)) * 3600 }}
+        sequence:
+          - variables:
+              gap_hours: >-
+                {{ ((trigger.to_state.last_reported - trigger.from_state.last_reported).total_seconds() / 3600) | round(1) }}
+          - event: fridge_sensor_recovered
+            event_data:
+              entity_id: "{{ monitored }}"
+              gap_hours: "{{ gap_hours }}"
+          - action: logbook.log
+            data:
+              name: Kühlschrank-Watchdog
+              message: >-
+                ✅ {{ entity_name(monitored) or monitored }} meldet wieder
+                (nach {{ gap_hours }} h Stille)
+              entity_id: "{{ monitored }}"
+          - if:
+              - "{{ true }}"
+            then: !input recovery_actions

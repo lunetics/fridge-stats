@@ -102,8 +102,16 @@ incident: hours at 15–21 °C).
 
 ## 6. Monitoring & data quality
 
-- **Sensor watchdog** (high value — the sensor was silently dead 06-27→07-11!):
-  alert on >3 h without any report *(session-derived)*.
+- **Sensor watchdog** — ✅ shipped as `blueprints/fridge_sensor_watchdog.yaml`
+  (high value — the sensor was silently dead 06-27→07-11!): alerts on a
+  `silence_hours` gap (default 3) with no report, using `last_reported` so a
+  steady value never false-alarms. Fires `fridge_sensor_silent` /
+  `fridge_sensor_recovered` events and runs user actions. Detection is on the
+  alive→silent transition; a still-dead sensor re-alerts ~`silence_hours` after
+  each HA restart (last_reported resets on restart). *Future robustness:* a
+  periodic re-check would also catch a sensor that was already silent when the
+  automation was reloaded (the one transition-model gap), but needs dedup state
+  to stay spam-free.
 - **Nightly offline recompute** of exact stats + τ via `analysis/` script (cron).
 
 ## 7. Sensor fusion (the blueprint's aux input)

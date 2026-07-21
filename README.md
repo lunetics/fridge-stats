@@ -38,6 +38,10 @@ the full setup is still two files — see [Install](#install).
 - **Two-tier alarms** with user-defined actions: door-ajar warning (default after 20 min) and
   a critical over-temperature backstop (default >11 °C for 10 min) that also catches appliance
   failure and survives restarts.
+- **Sensor-silence watchdog** (companion blueprint `fridge_sensor_watchdog.yaml`): alerts when
+  the fridge sensor stops reporting for a configurable time (default 3 h) — a battery dead in
+  the cold or a dropped link otherwise fails invisibly. Uses `last_reported`, so a steady
+  temperature never false-alarms; fires `fridge_sensor_silent` / `fridge_sensor_recovered`.
 - **Fully configurable blueprint** (typed selectors): fridge sensor, ambient sensor, optional
   auxiliary door/motion/vibration sensor for future sensor fusion, all thresholds, alarm
   actions. Instantiate per appliance — a freezer needs only a second helper set.
