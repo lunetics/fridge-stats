@@ -165,7 +165,10 @@ python3 analysis/backfill_statistics.py --url http://homeassistant.local:8123 \
 > orders of magnitude. Expect reconstructed months to undercount versus live detection.
 
 > [!IMPORTANT]
-> Moving the sensor to a different shelf changes τ. Recalibrate after any reposition.
+> Moving the sensor to a different shelf changes τ **and** the door-vs-compressor rate
+> separation. After any reposition, recalibrate τ and re-run `--rate-check` — but let a
+> few days of openings at the new spot accumulate first, since the recorder still holds
+> the old placement — then update `rise_rate_min` if the compressor/door rates shifted.
 
 ## Sensor-silence watchdog (optional)
 
@@ -202,5 +205,6 @@ The blueprint is per-appliance; the package's helpers are one appliance's state.
 | Short openings never appear | Expected: openings below ~15–30 s fall under the `rise_amp_min` blip threshold and are discarded ([limitations](../README.md#limitations)). |
 | Alarm fires during normal cooking sessions | Raise `ajar_minutes`, or raise `critical_temp` if your fridge runs warm. |
 | False door events from the compressor cycle | Your compressor edge is faster than the default 0.10 °C/min — run `calibrate_tau.py --rate-check` and raise `rise_rate_min` (see [Calibrate detection thresholds](#calibrate-detection-thresholds)). |
+| A long "door ajar" / over-long opening alarm when nobody opened the door | Same root cause: a compressor-off warming ramp crossed `rise_rate_min`, and because the interior keeps drifting up while the compressor is off, no "close" registers until the next cooling cycle — so a normal warm phase is booked as one long opening. Run `calibrate_tau.py --rate-check` and raise `rise_rate_min` above your compressor ceiling; if the door and compressor rate populations overlap, add the auxiliary door sensor. |
 | Everything classified `sustained_warmup` | The ambient sensor input probably points at a wrong (e.g. outdoor) sensor, making the drive term implausible — verify both sensor inputs. |
 | False openings right after a Home Assistant restart | Not expected — the blueprint guards `unknown`/`unavailable` transitions. If observed, check whether another integration replays stale states for the sensor, and open an issue with the automation trace. |
