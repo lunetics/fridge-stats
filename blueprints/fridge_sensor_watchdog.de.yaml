@@ -1,15 +1,16 @@
 blueprint:
-  name: Sensor Silence Watchdog (fridge-stats)
+  name: Sensor-Stille-Watchdog (fridge-stats)
   description: >
-    Liveness watchdog for a reporting sensor: alerts when the monitored entity
-    has produced NO fresh report for longer than a configurable time, and
-    optionally again when it recovers. Companion to the Fridge Door Monitor — a
-    fridge/freezer temperature sensor that goes silent (battery dead in the cold,
-    a dropped Zigbee link) otherwise fails invisibly: its last value lingers and
-    the door detector simply stops seeing events. The check uses last_reported,
-    NOT last_changed, so a healthy-but-steady sensor (a fridge holding a constant
-    temperature) never false-alarms. Fires fridge_sensor_silent /
-    fridge_sensor_recovered events and runs user-defined alarm/recovery actions.
+    Liveness-Watchdog für einen meldenden Sensor: alarmiert, wenn die überwachte
+    Entität länger als eine konfigurierbare Zeit KEINEN frischen Report mehr
+    geliefert hat, und optional erneut bei Erholung. Companion zum Kühlschrank-Tür-
+    Monitor — ein Kühl-/Gefrierschrank-Temperatursensor, der verstummt (Batterie in
+    der Kälte leer, abgerissener Zigbee-Link), fällt sonst unsichtbar aus: sein
+    letzter Wert bleibt stehen und der Tür-Detektor sieht schlicht keine Events mehr.
+    Die Prüfung nutzt last_reported, NICHT last_changed, damit ein gesund-aber-
+    konstanter Sensor (Kühlschrank hält konstante Temperatur) nie fehlalarmiert.
+    Feuert fridge_sensor_silent / fridge_sensor_recovered Events und führt
+    nutzerdefinierte Alarm-/Erholungs-Aktionen aus.
   domain: automation
   author: lunetics
   source_url: https://github.com/lunetics/fridge-stats/blob/main/blueprints/fridge_sensor_watchdog.de.yaml
@@ -17,46 +18,47 @@ blueprint:
     min_version: "2026.6.0"
   input:
     sensor:
-      name: Monitored sensor
+      name: Überwachter Sensor
       icon: mdi:radar
       input:
         monitored_sensor:
-          name: Sensor to watch
+          name: Zu überwachender Sensor
           description: >
-            The entity whose liveness is monitored — typically the in-fridge
-            temperature sensor. Any entity works; the check is report-based, not
-            value-based.
+            Die Entität, deren Liveness überwacht wird — typischerweise der
+            Kühlschrank-Temperatursensor. Jede Entität geht; die Prüfung ist
+            report-basiert, nicht wert-basiert.
           selector:
             entity: {}
     settings:
-      name: Settings
+      name: Einstellungen
       icon: mdi:cog
       collapsed: true
       input:
         silence_hours:
-          name: Silence threshold (hours)
+          name: Stille-Schwelle (Stunden)
           description: >
-            Alert when the sensor has not reported for at least this many hours.
-            A healthy fridge multisensor reports every 1–10 min, so 3 h clears
-            normal gaps while still catching a same-day failure.
+            Alarmiert, wenn der Sensor mindestens so viele Stunden nicht gemeldet
+            hat. Ein gesunder Kühlschrank-Multisensor meldet alle 1–10 min, also
+            überbrücken 3 h normale Lücken und fangen trotzdem einen Ausfall am
+            selben Tag ab.
           default: 3
           selector:
             number: {min: 1, max: 48, step: 1, unit_of_measurement: h, mode: box}
     actions:
-      name: Alarm actions
+      name: Alarm-Aktionen
       icon: mdi:alarm-light
       input:
         alarm_actions:
-          name: Silence alarm actions
-          description: Runs once when the sensor crosses the silence threshold.
+          name: Stille-Alarm-Aktionen
+          description: Läuft einmal, wenn der Sensor die Stille-Schwelle überschreitet.
           default: []
           selector:
             action: {}
         recovery_actions:
-          name: Recovery actions (optional)
+          name: Erholungs-Aktionen (optional)
           description: >
-            Runs when the sensor reports again after having been silent past the
-            threshold. Leave empty for none.
+            Läuft, wenn der Sensor nach Überschreiten der Schwelle wieder meldet.
+            Leer lassen für keine.
           default: []
           selector:
             action: {}

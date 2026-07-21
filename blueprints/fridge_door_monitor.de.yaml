@@ -1,19 +1,19 @@
 blueprint:
-  name: Fridge Door Monitor (temperature-physics based)
+  name: Kühlschrank-Tür-Monitor (temperaturphysik-basiert)
   description: >
-    Detects fridge door openings WITHOUT a door contact sensor, from the in-fridge
-    temperature signal: a door opening warms the interior toward room temperature
-    faster than the compressor cycle does (on the reference fridge, >=0.10 vs
-    <=0.06 °C/min — measured values, not physical constants; tune rise_rate_min for
-    your appliance, see docs). A second, ambient temperature sensor is a REQUIRED
-    input: it provides the room-temperature drive for the duration estimate
-    t_open = -tau * ln(1 - dT_peak / (T_room - T0)).
-    Fires fridge_door_opened / fridge_door_closed / fridge_door_ajar events,
-    writes logbook entries, maintains counters/durations in helpers (see the
-    fridge-stats package, which ships matching helpers as defaults), and runs
-    user-defined alarm actions for door-ajar and over-temperature conditions.
-    Designed to be instantiated per appliance (fridge, freezer, ...) with its
-    own helper set.
+    Erkennt Kühlschrank-Türöffnungen OHNE Türkontaktsensor, allein aus dem
+    Innentemperatur-Signal: eine Türöffnung erwärmt den Innenraum in Richtung
+    Raumtemperatur schneller als der Kompressorzyklus (am Referenz-Kühlschrank
+    >=0,10 vs <=0,06 °C/min — gemessene Werte, keine Naturkonstanten; passe
+    rise_rate_min an dein Gerät an, siehe Doku). Ein zweiter, Umgebungs-
+    Temperatursensor ist PFLICHT-Input: er liefert die Raumtemperatur-Antriebskraft
+    für die Dauerschätzung t_open = -tau * ln(1 - dT_peak / (T_room - T0)).
+    Feuert fridge_door_opened / fridge_door_closed / fridge_door_ajar Events,
+    schreibt Logbuch-Einträge, pflegt Zähler/Dauern in Helfern (siehe das
+    fridge-stats-Package, das passende Helfer als Defaults mitbringt) und führt
+    nutzerdefinierte Alarm-Aktionen für Tür-angelehnt und Übertemperatur aus.
+    Pro Gerät instanziierbar (Kühlschrank, Gefrierschrank, ...) mit eigenem
+    Helfer-Satz.
   domain: automation
   author: lunetics
   source_url: https://github.com/lunetics/fridge-stats/blob/main/blueprints/fridge_door_monitor.de.yaml
@@ -21,159 +21,160 @@ blueprint:
     min_version: "2026.6.0"  # per-step note: annotations require 2026.6
   input:
     sensors:
-      name: Sensors
+      name: Sensoren
       icon: mdi:thermometer
       input:
         fridge_temp_sensor:
-          name: Fridge temperature sensor
-          description: Temperature sensor INSIDE the fridge.
+          name: Kühlschrank-Temperatursensor
+          description: Temperatursensor IM Kühlschrank.
           selector:
             entity:
               domain: sensor
               device_class: temperature
         ambient_temp_sensor:
-          name: Ambient temperature sensor
+          name: Umgebungs-Temperatursensor
           description: >
-            Room temperature reference (thermal driving force). A sensor in or
-            near the kitchen; any same-floor room sensor works.
+            Raumtemperatur-Referenz (thermische Antriebskraft). Ein Sensor in oder
+            nahe der Küche; jeder Raumsensor auf derselben Etage funktioniert.
           selector:
             entity:
               domain: sensor
               device_class: temperature
         aux_open_sensor:
-          name: Auxiliary door sensor (optional, future feature)
+          name: Zusätzlicher Türsensor (optional, künftiges Feature)
           description: >
-            Optional motion/vibration/contact binary_sensor on the fridge door
-            for precise open/close timestamps. v1 logs its events alongside the
-            thermal detection (sensor fusion is a planned feature); leave empty
-            if not available.
+            Optionaler Bewegungs-/Vibrations-/Kontakt-binary_sensor an der
+            Kühlschranktür für präzise Öffnungs-/Schließ-Zeitstempel. v1 loggt
+            seine Events neben der thermischen Erkennung (Sensor-Fusion ist
+            geplant); leer lassen, falls nicht vorhanden.
           default: []
           selector:
             entity:
               domain: binary_sensor
     state_helpers:
-      name: State helpers (defaults = fridge-stats package)
+      name: Zustands-Helfer (Defaults = fridge-stats-Package)
       icon: mdi:database
       collapsed: true
       input:
         helper_door_open:
-          name: Door-state boolean
+          name: Türzustand-Boolean
           default: input_boolean.fridge_door_open
           selector:
             entity:
               domain: input_boolean
         helper_t0:
-          name: T0 snapshot helper
+          name: T0-Snapshot-Helfer
           default: input_number.fridge_t0
           selector:
             entity:
               domain: input_number
         helper_troom0:
-          name: Room-temp snapshot helper
+          name: Raumtemp-Snapshot-Helfer
           default: input_number.fridge_troom0
           selector:
             entity:
               domain: input_number
         helper_tau:
-          name: Tau calibration constant helper (seconds)
+          name: Tau-Kalibrierkonstante-Helfer (Sekunden)
           default: input_number.fridge_tau
           selector:
             entity:
               domain: input_number
         helper_opened_at:
-          name: Opened-at timestamp helper
+          name: Öffnungszeitpunkt-Helfer
           default: input_datetime.fridge_opened_at
           selector:
             entity:
               domain: input_datetime
         helper_last_duration:
-          name: Last opening duration helper (seconds)
+          name: Letzte-Öffnungsdauer-Helfer (Sekunden)
           default: input_number.fridge_last_open_duration
           selector:
             entity:
               domain: input_number
         helper_last_class:
-          name: Last event class helper
+          name: Letzte-Ereignisklasse-Helfer
           default: input_text.fridge_last_event_class
           selector:
             entity:
               domain: input_text
         counter_openings:
-          name: Openings counter
+          name: Öffnungs-Zähler
           default: counter.fridge_openings_total
           selector:
             entity:
               domain: counter
         helper_open_seconds_total:
-          name: Accumulated open-seconds helper
+          name: Kumulierte-Öffnungssekunden-Helfer
           default: input_number.fridge_open_seconds_total
           selector:
             entity:
               domain: input_number
     thresholds:
-      name: Detection thresholds
+      name: Erkennungs-Schwellen
       icon: mdi:tune
       collapsed: true
       input:
         rise_rate_min:
-          name: Minimum rise rate (°C/min)
+          name: Minimale Anstiegsrate (°C/min)
           description: >
-            Reference-fridge figures: door events rose >=0.3 °C/min, the compressor
-            edge stayed <=0.06 °C/min, so 0.10 sits between with margin. These are
-            MEASURED on one fridge, not universal — a faster compressor needs a
-            higher value. Calibrate yours: analysis/calibrate_tau.py --rate-check.
+            Referenz-Kühlschrank-Werte: Türöffnungen stiegen mit >=0,3 °C/min, die
+            Kompressor-Flanke blieb <=0,06 °C/min, also liegt 0,10 mit Reserve
+            dazwischen. GEMESSEN an einem Kühlschrank, nicht universell — ein
+            schnellerer Kompressor braucht einen höheren Wert. Kalibriere deinen:
+            analysis/calibrate_tau.py --rate-check.
           default: 0.10
           selector:
             number: {min: 0.02, max: 0.5, step: 0.01, unit_of_measurement: "°C/min"}
         rise_amp_min:
-          name: Minimum excursion amplitude (°C)
-          description: Total rise below this is discarded as a blip (not counted).
+          name: Minimale Ausschlags-Amplitude (°C)
+          description: Gesamtanstieg darunter wird als Störspitze verworfen (nicht gezählt).
           default: 0.30
           selector:
             number: {min: 0.1, max: 1.0, step: 0.05, unit_of_measurement: "°C"}
         fall_confirm:
-          name: Fall confirmation (°C)
-          description: A report this far below the previous one closes the event.
+          name: Abfall-Bestätigung (°C)
+          description: Ein Messwert so weit unter dem vorherigen schließt das Ereignis.
           default: 0.05
           selector:
             number: {min: 0.02, max: 0.5, step: 0.01, unit_of_measurement: "°C"}
         ajar_minutes:
-          name: Door-ajar warning after (minutes)
+          name: Tür-angelehnt-Warnung nach (Minuten)
           default: 15
           selector:
             number: {min: 5, max: 120, step: 1, unit_of_measurement: min}
         critical_temp:
-          name: Critical fridge temperature (°C)
+          name: Kritische Kühlschranktemperatur (°C)
           description: >
-            Interior temperature that, held for 30 min, fires the critical alarm.
-            Default 10 °C = above the EU legal ceiling for chilled food (8 °C) with
-            a grace window, so routine restocking transients do not trip it.
+            Innentemperatur, die für 30 min gehalten den Kritisch-Alarm auslöst.
+            Default 10 °C = über der EU-Rechtsobergrenze für gekühlte Ware (8 °C)
+            mit Karenzfenster, damit normale Einräum-Transienten nicht auslösen.
           default: 10
           selector:
             number: {min: 6, max: 20, step: 0.5, unit_of_measurement: "°C"}
         stale_hours:
-          name: Stale-state guard (hours)
+          name: Veralteter-Zustand-Schutz (Stunden)
           description: >
-            If the closing report arrives more than this many hours after the
-            recorded opening (e.g. the automation was paused mid-event or the
-            sensor was away), the stale event is discarded instead of booking
-            an absurd duration. Real door-ajar incidents stay well below this.
+            Trifft der Schließ-Messwert mehr als so viele Stunden nach der
+            erfassten Öffnung ein (z. B. Automation mitten im Ereignis pausiert
+            oder Sensor weg), wird das veraltete Ereignis verworfen statt eine
+            absurde Dauer zu buchen. Echte Tür-angelehnt-Fälle bleiben klar darunter.
           default: 6
           selector:
             number: {min: 1, max: 48, step: 1, unit_of_measurement: h}
     alarms:
-      name: Alarm actions
+      name: Alarm-Aktionen
       icon: mdi:alarm-light
       input:
         warn_actions:
-          name: Door-ajar warning actions
-          description: Runs when the door seems open/ajar for the warning time.
+          name: Tür-angelehnt-Warnaktionen
+          description: Läuft, wenn die Tür für die Warnzeit offen/angelehnt scheint.
           default: []
           selector:
             action: {}
         critical_actions:
-          name: Critical over-temperature actions
-          description: Runs when the fridge stays above the critical temperature.
+          name: Kritische-Übertemperatur-Aktionen
+          description: Läuft, wenn der Kühlschrank über der kritischen Temperatur bleibt.
           default: []
           selector:
             action: {}
