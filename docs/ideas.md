@@ -145,6 +145,16 @@ to the community is a genuine contribution** (needs a public repo + `source_url`
   ([#763022](https://community.home-assistant.io/t/history-stats-do-not-reset-at-midnight-but-require-an-additional-event-to-reset/763022), unverified).
 - **EMA smoothing upstream of rate calculation** if noise-triggered false door
   events ever appear ([pdx.su DIY monitor](https://pdx.su/blog/2025-05-10-diy-overengineered-fridge/freezer-monitor/)).
+- **Adaptive rolling compressor ceiling** (v2 candidate): instead of the fixed
+  `ajar_warn_temp`, estimate the normal cycle ceiling live — a trailing
+  high-percentile of the interior temperature — and treat "interior > ceiling +
+  margin" as the warm-open signal. It self-tunes per appliance and season, so no
+  manual threshold is needed. A causal back-test on the reference fridge rejected
+  all 5 compressor-cycle phantoms (0 false ajar) while catching 10 of 13 real
+  openings; the 3 misses were short grabs the existing *rate* detector already
+  catches — the two are complementary (rate = short fast openings, ceiling =
+  slow/long ones + phantom rejection). Needs a small helper to carry the rolling
+  estimate. Illustrated in [`img/adaptive_ceiling.png`](img/adaptive_ceiling.png).
 - Temperature-based > power-based detection, with sourced counter-evidence: a
   failed compressor still draws power while cooling nothing; a user missed a real
   food-loss event on power-only monitoring —
