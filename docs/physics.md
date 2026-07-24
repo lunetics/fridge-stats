@@ -90,8 +90,20 @@ door sensor (the planned aux input).
 ## Design decisions
 
 - **Rate over absolute threshold**: absolute thresholds break when the baseline drifts
-  (season, setpoint, load). The rate criterion survives drift; the critical-temperature
-  backstop is the only absolute threshold, and it is deliberately far above the band.
+  (season, setpoint, load). *Detection* stays purely rate-based; the two absolute
+  thresholds are backstops layered on top, not detectors — `critical_temp` (deliberately
+  far above the band) and `ajar_warn_temp` (the ajar warmth gate, just above the normal
+  cycle ceiling, see next bullet).
+- **Ajar warmth gate (`ajar_warn_temp`)**: the rate detector can enter "open" on a
+  compressor-off warming ramp, and because the interior keeps drifting up while the
+  compressor is off, it never sees a `fall_confirm` close until the next cooling cycle — so
+  a pure compressor cycle books a long "open" and would raise a false door-ajar alarm
+  despite never leaving the normal cycle band (~7–8 °C). Gating the ajar warning, and
+  discarding such a long-but-cold episode on close as `compressor_cycle`, on the interior
+  actually crossing `ajar_warn_temp` rejects these phantoms: a real open door climbs past
+  the cycle ceiling within minutes, a compressor cycle never does. The trade-off — a
+  genuinely open but still-cold door gets no early ajar nudge — is covered by the
+  `critical_temp` backstop, which re-arms on temperature alone regardless of door state.
 - **Trigger-pair slope instead of derivative/trend helpers**: a state trigger delivers the
   previous and current report including timestamps, giving the segment slope and the exact
   pre-rise T₀ in one step. Derivative/trend helpers add entities, smoothing lag, and (for

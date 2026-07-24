@@ -142,6 +142,20 @@ blueprint:
           default: 15
           selector:
             number: {min: 5, max: 120, step: 1, unit_of_measurement: min}
+        ajar_warn_temp:
+          name: Ajar warning minimum temperature (°C)
+          description: >
+            The door-ajar warning fires only once the interior has actually
+            reached this temperature, and a long "open" state whose peak never
+            crosses it is discarded as a compressor off-cycle drift (phantom),
+            not counted. This rejects the failure mode where the passive
+            compressor-off warming ramp is misread as a door left ajar (a slow
+            rise into the normal cycle ceiling, never a real opening). Set it
+            just above your fridge's normal compressor-cycle top; the 8 °C
+            default is the EU chilled-food ceiling and sits below critical_temp.
+          default: 8
+          selector:
+            number: {min: 4, max: 15, step: 0.5, unit_of_measurement: "°C"}
         critical_temp:
           name: Critical fridge temperature (°C)
           description: >
@@ -196,6 +210,7 @@ variables:
   fall_confirm: !input fall_confirm
   stale_hours: !input stale_hours
   ajar_minutes: !input ajar_minutes
+  ajar_warn_temp: !input ajar_warn_temp
 
 triggers:
   - trigger: state
@@ -339,6 +354,26 @@ actions:
                   entity_id: "{{ door_helper }}"
               - stop: "stale open state discarded — not counted"
             note: "Self-heal: a pause while 'open' must not book a days-long duration."
+          - if:
+              - >-
+                {{ wall_s | float(0) >= (ajar_minutes | float(15)) * 60
+                   and peak | float(0) < ajar_warn_temp | float(8) }}
+            then:
+              - action: input_text.set_value
+                target:
+                  entity_id: !input helper_last_class
+                data:
+                  value: compressor_cycle
+              - action: logbook.log
+                data:
+                  name: Fridge
+                  message: >-
+                    Long 'open' discarded as compressor off-cycle drift — interior peaked at
+                    {{ peak | float(0) | round(2) }} °C over {{ (wall_s | float(0) / 60) | round(0) }} min,
+                    never crossing {{ ajar_warn_temp | float(8) }} °C (no real opening)
+                  entity_id: "{{ door_helper }}"
+              - stop: "compressor-cycle phantom — not counted"
+            note: "A long 'open' that never warmed past ajar_warn_temp is a compressor off-cycle ramp, not a door."
           - action: input_number.set_value
             target:
               entity_id: !input helper_last_duration
@@ -376,25 +411,39 @@ actions:
                 room {{ troom | float(0) | round(1) }} °C)
               entity_id: "{{ door_helper }}"
 
-      # ---- door AJAR warning: still "open" after N minutes ----
+      # ---- door AJAR warning: still "open" after N minutes AND actually warm ----
       - conditions:
           - condition: trigger
             id: ajar_time
         sequence:
-          - event: fridge_door_ajar
-            event_data:
-              opened_at: "{{ states(helper_opened_at) }}"
-              current_temp: "{{ states(fridge_sensor) }}"
-          - action: logbook.log
-            data:
-              name: Fridge
-              message: >-
-                ⚠️ Door apparently open/ajar since {{ states(helper_opened_at) }}
-                (warning threshold reached)
-              entity_id: "{{ door_helper }}"
           - if:
-              - "{{ true }}"
-            then: !input warn_actions
+              - "{{ states(fridge_sensor) | float(0) >= ajar_warn_temp | float(8) }}"
+            then:
+              - event: fridge_door_ajar
+                event_data:
+                  opened_at: "{{ states(helper_opened_at) }}"
+                  current_temp: "{{ states(fridge_sensor) }}"
+              - action: logbook.log
+                data:
+                  name: Fridge
+                  message: >-
+                    ⚠️ Door apparently open/ajar since {{ states(helper_opened_at) }}
+                    (interior at {{ states(fridge_sensor) }} °C)
+                  entity_id: "{{ door_helper }}"
+              - if:
+                  - "{{ true }}"
+                then: !input warn_actions
+            else:
+              - action: logbook.log
+                data:
+                  name: Fridge
+                  message: >-
+                    Ajar warning suppressed — interior only {{ states(fridge_sensor) }} °C
+                    (below {{ ajar_warn_temp | float(8) }} °C): a compressor cycle, not an open door
+                  entity_id: "{{ door_helper }}"
+            note: >-
+              Warmth gate rejects the compressor-off-drift phantom: a door-state that
+              has been "on" past the ajar time but whose interior never actually warmed.
 
       # ---- CRITICAL over-temperature (ajar backstop + appliance failure) ----
       - conditions:
