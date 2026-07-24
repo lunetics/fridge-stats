@@ -13,6 +13,12 @@ duration estimate.)
 > ±50 % threshold variation; absolute per-event seconds carry roughly a factor-2 uncertainty
 > until calibrated against a timed opening. See [docs/physics.md](docs/physics.md).
 
+![Detected fridge openings over the interior temperature](docs/img/overview.png)
+
+*Door openings (green) read straight off the interior temperature, above the compressor
+sawtooth; a compressor-cycle phantom (red) is recognised and discarded. Render this for your own
+fridge with [`analysis/plot_diagnostics.py`](docs/installation.md#see-it-plot_diagnosticspy).*
+
 **One-click blueprint import** (Home Assistant 2026.6+):
 
 [![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.][import-badge]][import-link]
@@ -34,13 +40,14 @@ the full setup is still two files — see [Install](#install).
   `fridge_door_ajar`, `fridge_temp_critical`, `fridge_aux_trigger`
   ([reference](docs/reference.md#events)).
 - **Event classes**: `quick_grab` / `normal_grab` / `extended_open` / `sustained_warmup`
-  (door ajar, warm food, or rapid repeated access) / `blip` (discarded).
+  (door ajar, warm food, or rapid repeated access) / `blip` and `compressor_cycle` (discarded).
 - **Logbook history**: every opening, closing, and alarm writes a logbook entry on the
   door-state entity.
 - **Statistics layer**: total and daily/weekly/monthly opening counts, accumulated open time,
   7-day median and maximum duration.
-- **Two-tier alarms** with user-defined actions: door-ajar warning (default after 15 min) and
-  a critical over-temperature backstop (default >10 °C (50 °F) sustained 30 min) that also
+- **Two-tier alarms** with user-defined actions: door-ajar warning (default after 15 min, and
+  only once the interior actually reaches `ajar_warn_temp`, so a compressor cycle never trips it)
+  and a critical over-temperature backstop (default >10 °C (50 °F) sustained 30 min) that also
   catches appliance failure and survives restarts.
 - **Sensor-silence watchdog** (companion blueprint `fridge_sensor_watchdog.yaml`): alerts when
   the fridge sensor stops reporting for a configurable time (default 3 h) — a battery dead in
@@ -49,7 +56,8 @@ the full setup is still two files — see [Install](#install).
 - **Fully configurable blueprint** (typed selectors): fridge sensor, ambient sensor, optional
   auxiliary door/motion/vibration sensor for future sensor fusion, all thresholds, alarm
   actions. Instantiate per appliance — a freezer needs only a second helper set.
-- **Calibration and backfill toolkit**: τ self-calibration from recorder history and
+- **Calibration and backfill toolkit**: τ self-calibration from recorder history, threshold
+  calibration (`--rate-check`), diagnostic plots (`analysis/plot_diagnostics.py`), and
   statistics backfill from the sensor's long-term statistics — Home Assistant onboard data
   only, no external database.
 - **Read-only toward your system**: the configured sensors are only read; the project

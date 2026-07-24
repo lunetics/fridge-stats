@@ -16,6 +16,13 @@ rate separation from the compressor edge. This separation, not any absolute thre
 the primary detection signal; it stays valid as the baseline drifts with season and setpoint.
 The fall of the temperature after the door closes ends the event.
 
+![Interior temperature with detected openings](img/overview.png)
+
+*The compressor sawtooth with detected openings on top: real openings (green) break well above
+the band, a compressor-cycle phantom (red) rides the sawtooth top. Lower panel: the per-report
+rate against `rise_rate_min`. Generate this for your own fridge with
+[`plot_diagnostics.py`](installation.md#see-it-plot_diagnosticspy).*
+
 ## Duration model
 
 While the door is open, interior air (and the sensor in it) relaxes toward room temperature
@@ -90,8 +97,20 @@ door sensor (the planned aux input).
 ## Design decisions
 
 - **Rate over absolute threshold**: absolute thresholds break when the baseline drifts
-  (season, setpoint, load). The rate criterion survives drift; the critical-temperature
-  backstop is the only absolute threshold, and it is deliberately far above the band.
+  (season, setpoint, load). *Detection* stays purely rate-based; the two absolute
+  thresholds are backstops layered on top, not detectors — `critical_temp` (deliberately
+  far above the band) and `ajar_warn_temp` (the ajar warmth gate, just above the normal
+  cycle ceiling, see next bullet).
+- **Ajar warmth gate (`ajar_warn_temp`)**: the rate detector can enter "open" on a
+  compressor-off warming ramp, and because the interior keeps drifting up while the
+  compressor is off, it never sees a `fall_confirm` close until the next cooling cycle — so
+  a pure compressor cycle books a long "open" and would raise a false door-ajar alarm
+  despite never leaving the normal cycle band (~7–8 °C). Gating the ajar warning, and
+  discarding such a long-but-cold episode on close as `compressor_cycle`, on the interior
+  actually crossing `ajar_warn_temp` rejects these phantoms: a real open door climbs past
+  the cycle ceiling within minutes, a compressor cycle never does. The trade-off — a
+  genuinely open but still-cold door gets no early ajar nudge — is covered by the
+  `critical_temp` backstop, which re-arms on temperature alone regardless of door state.
 - **Trigger-pair slope instead of derivative/trend helpers**: a state trigger delivers the
   previous and current report including timestamps, giving the segment slope and the exact
   pre-rise T₀ in one step. Derivative/trend helpers add entities, smoothing lag, and (for
@@ -103,6 +122,24 @@ door sensor (the planned aux input).
   close branch, so sub-threshold blips can be discarded without rolling anything back.
 - **`queued` automation mode**: the detector is a state machine over an ordered report
   stream; parallel processing of two reports would race the helper state.
+
+### Illustrated: the compressor-cycle phantom
+
+A compressor-off warming ramp can cross `rise_rate_min` and open the detector; because the
+interior keeps drifting up while the compressor rests, no `fall_confirm` close registers until
+the next cooling cycle, so a pure compressor cycle is booked as a long "open":
+
+![Compressor-cycle phantom zoom](img/phantom_zoom.png)
+
+*The interior only reaches ~7 °C — squarely inside the normal band — over the whole "open"
+window, so `ajar_warn_temp` (dashed) suppresses the warning and the episode is discarded on
+close as `compressor_cycle`.*
+
+Subtracting a rolling compressor ceiling "equalizes" the sawtooth: normal cycling collapses to a
+flat band at zero and only real openings rise above it — the same split the fixed
+`ajar_warn_temp` approximates with one number.
+
+![Sawtooth equalized against the rolling ceiling](img/equalized.png)
 
 ## Known limitations
 

@@ -3,6 +3,54 @@
 All notable changes to this project are documented in this file. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.4] - 2026-07-24
+
+### Added
+
+- `analysis/plot_diagnostics.py`: read-only diagnostic plots for any installation — interior
+  temperature with detected openings shaded by class, the compressor sawtooth "equalized" against
+  a rolling ceiling, a compressor-cycle phantom zoom, and an adaptive rolling-ceiling detector
+  view. Re-simulates the detector from the temperature series (blueprint rules), so it needs no
+  live helpers; REST history or `--from-csv`.
+- `analysis/make_demo_data.py`: deterministic synthetic fridge series (no real data) that
+  reproduces the sawtooth, grabs, a long opening, compressor-cycle phantoms, and a blip — a way
+  to try `plot_diagnostics.py` without a live instance.
+- Documentation figures (`docs/img/`, rendered from the reference installation) embedded in the
+  README and physics.md; an installation section on reading `ajar_warn_temp` / `rise_rate_min`
+  off the plots.
+- `docs/ideas.md`: adaptive rolling-ceiling detector as a v2 candidate (self-tuning alternative
+  to the fixed `ajar_warn_temp`), with the causal back-test result.
+
+### Changed
+
+- installation.md troubleshooting: the false door-ajar / over-long-opening row now leads with
+  `ajar_warn_temp` as the primary fix (introduced in 0.1.3), with `rise_rate_min` as the
+  complementary "don't book it at all" remedy.
+
+## [0.1.3] - 2026-07-24
+
+### Added
+
+- `ajar_warn_temp` blueprint input (default 8 °C, the EU chilled-food ceiling): the
+  door-ajar warning now fires only once the interior has actually reached this
+  temperature. Rejects the compressor-off-drift phantom — during a compressor pause the
+  passive warming ramp crosses `rise_rate_min`, opens the door state, and never registers
+  a close until the next cooling cycle, so it sat "open" past `ajar_minutes` and raised a
+  spurious ajar alarm even though the interior only drifted up within its normal cycle
+  ceiling (~7–8 °C). Measured on the reference fridge: 5 of 8 ajar warnings over a 3-day
+  window were such phantoms; the warmth gate removes them while keeping the
+  genuinely-warm openings (peaks 13–15 °C).
+- `compressor_cycle` event class: a long "open" (≥ `ajar_minutes`) whose peak never
+  crossed `ajar_warn_temp` is discarded on close with a logbook note instead of being
+  counted, so phantom episodes no longer inflate the opening statistics.
+
+### Changed
+
+- The ajar warning is gated on interior temperature, not door-state duration alone. A
+  door "open" long enough but still cold (below `ajar_warn_temp`) logs a suppression note
+  instead of alarming; the `critical_temp` backstop still covers a real door left open,
+  since a genuinely open door climbs past the threshold within minutes.
+
 ## [0.1.2] - 2026-07-21
 
 ### Changed
