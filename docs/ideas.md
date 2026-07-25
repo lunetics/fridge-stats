@@ -143,7 +143,24 @@ incident: hours at 15–21 °C).
   this measures *portability*. The former blocker — the package hard-coded `fridge_`
   entity names — is resolved: `make_package.py --prefix <p>` generates a validated
   package copy per appliance, `deploy.sh --prefix` deploys it alongside the stock one.
-- **Humidity-based freshness inference**: open research gap, no source found —
+- **Optional humidity channel (`fridge_humidity_sensor` input) — strongest fusion
+  candidate, now ground-truth-backed.** Three controlled observations on the second
+  reference appliance (2026-07-25, user-stopwatched): a **5 s** grab was completely
+  invisible on the temperature channel (not a single report delta — first controlled
+  confirmation of the censored minimum) while humidity spiked 28→49 %RH within 20 s;
+  a **60 s** opening spiked 44→76 %RH; and — the honest caveat — a **compressor-off
+  phase moved humidity almost as far without any door** (23→53 %RH over 16 min,
+  evaporator moisture cycling). Separation is therefore the same trick as the
+  temperature detector: **rate, not level** (door ≈ +1 %RH/s for tens of seconds;
+  cycle ≈ +0.03 %RH/s). Design sketch: optional input; humidity-rate spike while the
+  door state is closed and no temperature event follows → book a `short_grab`
+  (sub-floor opening, counted separately, no τ duration — the temperature never moved,
+  so the inversion has nothing to invert). Would directly attack the documented
+  undercount of brief openings. Constraints: needs a combined temp/humidity sensor
+  (Aqara-class has it; hence optional), winter room-air contrast is smaller, and RH
+  sensors can saturate in fridges — validate against the aux door sensor when it
+  exists. Scope note: both reference appliances are the same brand (Siemens); none of
+  this measures cross-brand behaviour.
   parked *(scout-flagged)*.
 
 ## 8. Community prior-art
