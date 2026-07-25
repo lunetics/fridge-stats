@@ -141,9 +141,16 @@ def main():
     ap.add_argument("--source-dir", default=str(Path(__file__).parent / "package"))
     args = ap.parse_args()
 
-    prefix = args.prefix.strip("_").lower()
-    if not re.fullmatch(r"[a-z][a-z0-9_]*", prefix):
-        sys.exit(f"invalid prefix {args.prefix!r}: use lowercase ascii, digits, underscores")
+    # strict, no silent normalization: deploy.sh uses the prefix verbatim for its
+    # stock-vs-generated branch, the output filename and the tau-helper hint — a
+    # value normalized only here would diverge from all three (e.g. '_fridge_'
+    # would dodge deploy.sh's stock branch yet generate stock fridge_* entities,
+    # duplicating every helper definition)
+    prefix = args.prefix
+    if not re.fullmatch(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)*", prefix):
+        sys.exit(f"invalid prefix {args.prefix!r}: lowercase ascii letters/digits with "
+                 f"single inner underscores (no leading/trailing '_', no uppercase) — "
+                 f"the value is used verbatim in entity ids and by deploy.sh")
     display = args.display or prefix.replace("_", " ").capitalize()
     if slugify(display) != prefix:
         sys.exit(f"display {display!r} slugs to '{slugify(display)}', which must equal "
