@@ -123,8 +123,8 @@ incident: hours at 15–21 °C).
 - **Highest-value use is validation, not detection.** Every threshold this project
   ships (`rise_rate_min`, `ajar_warn_temp`, `fall_from_peak`) was tuned against
   episode labels the detector itself produced — self-referential by construction.
-  The 0.1.3/0.1.5 fixes each rested on a single user-confirmed real closing as the
-  only external anchor. Logging the aux sensor alongside the thermal detection for
+  The two 0.2.0 detector fixes rested on a single user-confirmed real closing as
+  the only external anchor. Logging the aux sensor alongside the thermal detection for
   a few weeks yields real open/close timestamps to measure what has so far only
   been argued: the true false-positive and miss rates, the actual short-opening
   detection floor (currently a physics estimate, never measured below 30 s), and

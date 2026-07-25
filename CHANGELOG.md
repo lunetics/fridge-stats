@@ -3,80 +3,98 @@
 All notable changes to this project are documented in this file. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.1.5] - 2026-07-25
+## [0.2.0] - 2026-07-25
+
+Two false-reading fixes to the detector's alarm and close rules, plus a diagnostic
+plotting toolkit. Both fixes came out of measuring the deployed detector against its own
+recorded history; the second was confirmed against a real, user-verified door opening.
 
 ### Added
 
+- `ajar_warn_temp` blueprint input (default 8 °C, the EU chilled-food ceiling): the
+  door-ajar warning fires only once the interior has actually reached this temperature.
+  Rejects the compressor-off-drift phantom — during a compressor pause the passive warming
+  ramp crosses `rise_rate_min`, opens the door state, and never registers a close until the
+  next cooling cycle, so it sat "open" past `ajar_minutes` and raised a spurious ajar alarm
+  even though the interior only drifted up within its normal cycle ceiling (~7–8 °C).
+  Measured on the reference fridge: 5 of 8 ajar warnings over a 3-day window were such
+  phantoms; the warmth gate removes them while keeping the genuinely-warm openings
+  (peaks 13–15 °C).
+- `compressor_cycle` event class: a long "open" (≥ `ajar_minutes`) whose peak never crossed
+  `ajar_warn_temp` is discarded on close with a logbook note instead of being counted, so
+  phantom episodes no longer inflate the opening statistics.
 - `fall_from_peak` blueprint input (default 0.4 °C) and the `helper_peak` state helper
-  (`input_number.fridge_peak`, new in the package): the event now closes only once the interior
-  has fallen a confirmed distance below the **highest temperature reached during the opening**,
-  instead of on the first report that dips `fall_confirm` (0.05 °C) below its predecessor. A new
-  peak-tracking branch runs ahead of the close branch, so a rising report updates the peak
-  rather than being read as a close candidate. Set `fall_from_peak: 0` for the old behaviour.
+  (`input_number.fridge_peak`, new in the package): the event closes only once the interior
+  has fallen a confirmed distance below the **highest temperature reached during the
+  opening**, instead of on the first report dipping `fall_confirm` (0.05 °C) below its
+  predecessor. A peak-tracking branch runs ahead of the close branch, so a rising report
+  updates the peak rather than being read as a close candidate. Set `fall_from_peak: 0` for
+  the previous behaviour.
+- `analysis/plot_diagnostics.py`: read-only diagnostic plots for any installation — interior
+  temperature with detected openings shaded by class, the compressor sawtooth "equalized"
+  against a rolling ceiling, a compressor-cycle phantom zoom, and a rolling-ceiling detector
+  view. Re-simulates the detector from the temperature series (blueprint rules), so it needs
+  no live helpers; REST history or `--from-csv`.
+- `analysis/make_demo_data.py`: deterministic synthetic fridge series (no real data)
+  reproducing the sawtooth, grabs, a long opening, compressor-cycle phantoms and a blip — a
+  way to try `plot_diagnostics.py` without a live instance.
+- Documentation figures (`docs/img/`, rendered from the reference installation) embedded in
+  the README and physics.md; an installation section on reading `ajar_warn_temp` /
+  `rise_rate_min` off the plots.
+- `docs/ideas.md`: the adaptive rolling-ceiling gate recorded as an investigated dead end —
+  evaluated at the decision moment it *suppressed* the warning for the longest real opening
+  (52 min, 15 °C), because the trailing estimate is contaminated by the ongoing and recent
+  openings; the fixed threshold fired on every real opening in the same test. Also records
+  that the aux door sensor's highest-value use is validation: every shipped threshold was
+  tuned against labels the detector itself produced, so the true false-positive, miss and
+  short-opening-floor rates stay unmeasured until an external reference is logged alongside.
+
+### Changed
+
+- The ajar warning is gated on interior temperature, not door-state duration alone. A door
+  "open" long enough but still cold logs a suppression note instead of alarming; the
+  `critical_temp` backstop still covers a real door left open, since a genuinely open door
+  climbs past the threshold within minutes.
+- Duration is computed from the tracked peak rather than from the report that closed the
+  event, so it no longer depends on which report happened to trigger the close.
+- The opening counter and accumulated open time now exclude compressor-cycle phantoms.
+  Existing totals are left as booked, so expect a visible discontinuity — see upgrade notes.
+- installation.md troubleshooting: the false door-ajar / over-long-opening row leads with
+  `ajar_warn_temp` as the primary fix, with `rise_rate_min` as the complementary
+  "don't book it at all" remedy.
 
 ### Fixed
 
 - One long warm period was chopped into several short "openings". While the door is open the
   interior sits on a plateau near room temperature, where a single noisy report 0.05 °C below
-  its predecessor satisfied the old close rule — so a cooking session was booked as a chain of
-  fragments, each with an understated duration. Measured on the reference fridge over 10 days:
-  7 of 23 booked closes carried the signature (temperature still rising afterwards and/or a
-  re-open within ~1 min); one dinner cluster was split into 5 fragments (3/3/3/7/29 min) that
-  the confirmed-fall rule merges into the single 59-minute period it was. Verified against a
-  user-confirmed real closing: the event closes 2.7 min later than before (waiting for genuine
-  cooling), still classified and alarmed correctly.
-- Knock-on: because fragments no longer hide below the 15-minute mark, the `compressor_cycle`
-  detection from 0.1.3 now catches them — 10 episodes that were counted as openings despite
-  peaking at only 5.0–7.5 °C (pure compressor sawtooth) are correctly discarded, so the
-  opening counter and total open time drop to honest values.
+  its predecessor satisfied the old close rule — so a cooking session was booked as a chain
+  of fragments, each with an understated duration. Measured on the reference fridge over
+  10 days: 7 of 23 booked closes carried the signature (temperature still rising afterwards
+  and/or a re-open within ~1 min); one dinner cluster was split into 5 fragments
+  (3/3/3/7/29 min) that the confirmed-fall rule merges into the single 59-minute period it
+  was. Verified against a user-confirmed real closing: the event closes 2.7 min later than
+  before (waiting for genuine cooling), still classified and alarmed correctly.
+- Knock-on of the above: because fragments no longer hide below the `ajar_minutes` mark, the
+  `compressor_cycle` rule now catches them — 10 episodes that were counted as openings while
+  peaking at only 5.0–7.5 °C (pure compressor sawtooth) are correctly discarded.
+- `make_demo_data.py`: the post-opening recovery multiplied one term by zero (reducing the
+  line to scaling the sawtooth toward 0 °C despite a "keep sawtooth" comment) and its window
+  was shorter than a few of its own time constants, so it was truncated while still well
+  above the sawtooth. Both produced abrupt steps up to 1.94 °C in the generated series; a
+  shared `ease_back()` crossfade brings the largest step down to 0.49 °C, which is an
+  intentionally scripted event.
 
-## [0.1.4] - 2026-07-24
+### Upgrade notes
 
-### Added
-
-- `analysis/plot_diagnostics.py`: read-only diagnostic plots for any installation — interior
-  temperature with detected openings shaded by class, the compressor sawtooth "equalized" against
-  a rolling ceiling, a compressor-cycle phantom zoom, and an adaptive rolling-ceiling detector
-  view. Re-simulates the detector from the temperature series (blueprint rules), so it needs no
-  live helpers; REST history or `--from-csv`.
-- `analysis/make_demo_data.py`: deterministic synthetic fridge series (no real data) that
-  reproduces the sawtooth, grabs, a long opening, compressor-cycle phantoms, and a blip — a way
-  to try `plot_diagnostics.py` without a live instance.
-- Documentation figures (`docs/img/`, rendered from the reference installation) embedded in the
-  README and physics.md; an installation section on reading `ajar_warn_temp` / `rise_rate_min`
-  off the plots.
-- `docs/ideas.md`: adaptive rolling-ceiling detector as a v2 candidate (self-tuning alternative
-  to the fixed `ajar_warn_temp`), with the causal back-test result.
-
-### Changed
-
-- installation.md troubleshooting: the false door-ajar / over-long-opening row now leads with
-  `ajar_warn_temp` as the primary fix (introduced in 0.1.3), with `rise_rate_min` as the
-  complementary "don't book it at all" remedy.
-
-## [0.1.3] - 2026-07-24
-
-### Added
-
-- `ajar_warn_temp` blueprint input (default 8 °C, the EU chilled-food ceiling): the
-  door-ajar warning now fires only once the interior has actually reached this
-  temperature. Rejects the compressor-off-drift phantom — during a compressor pause the
-  passive warming ramp crosses `rise_rate_min`, opens the door state, and never registers
-  a close until the next cooling cycle, so it sat "open" past `ajar_minutes` and raised a
-  spurious ajar alarm even though the interior only drifted up within its normal cycle
-  ceiling (~7–8 °C). Measured on the reference fridge: 5 of 8 ajar warnings over a 3-day
-  window were such phantoms; the warmth gate removes them while keeping the
-  genuinely-warm openings (peaks 13–15 °C).
-- `compressor_cycle` event class: a long "open" (≥ `ajar_minutes`) whose peak never
-  crossed `ajar_warn_temp` is discarded on close with a logbook note instead of being
-  counted, so phantom episodes no longer inflate the opening statistics.
-
-### Changed
-
-- The ajar warning is gated on interior temperature, not door-state duration alone. A
-  door "open" long enough but still cold (below `ajar_warn_temp`) logs a suppression note
-  instead of alarming; the `critical_temp` backstop still covers a real door left open,
-  since a genuinely open door climbs past the threshold within minutes.
+- **A Home Assistant restart is required**, not just a blueprint re-import: the package adds
+  `input_number.fridge_peak`, and packages load at startup. Without it the close rule falls
+  back on its `99` guard and the event will not close.
+- Both new inputs ship defaults, so existing automations upgrade without edits — but the
+  behaviour changes deliberately: long-but-cold "openings" no longer alarm and no longer
+  count. The opening counter will grow more slowly than before; that is the correction, not
+  a regression.
+- The 8 °C `ajar_warn_temp` default suits a fridge cycling to ~7 °C. Set it just above your
+  own compressor-cycle ceiling — `analysis/plot_diagnostics.py` shows where that sits.
 
 ## [0.1.2] - 2026-07-21
 
