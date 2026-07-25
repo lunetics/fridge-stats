@@ -3,6 +3,21 @@
 Documentation and code-style rules for this project. Keep new docs and strings consistent
 with these.
 
+## Repository language: English
+
+Everything in this repository is written in English — documentation, code comments, commit
+messages, blueprint and package YAML (names, descriptions, `note:` fields, logbook and
+notification texts), script output, and figure labels. Exactly two artifacts carry German
+labels, because German labels **are** their product:
+
+- the `.de.yaml` variants of the blueprints and the package — German *user-facing strings*
+  only; code-level comments and `note:` fields stay English even there;
+- the German view in `examples/dashboard-views.yaml` (the file also ships the English view).
+
+Functional German tokens that tooling needs in order to *process* the DE variant — such as
+the `Kühlschrank` display token and the umlaut transliteration in `make_package.py` — are
+mechanics, not prose, and are fine. Anything else in German is a defect.
+
 ## Temperatures: always "°C (°F)"
 
 Every **absolute** temperature in the docs and in user-facing strings is written in Celsius
