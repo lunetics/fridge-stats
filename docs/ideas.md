@@ -130,6 +130,19 @@ incident: hours at 15–21 °C).
   detection floor (currently a physics estimate, never measured below 30 s), and
   the real undercount factor. Do this *before* adding further threshold
   parameters — it turns tuning from plausible into measured.
+- **Second appliance = the missing cross-appliance variance measurement.** Every
+  published default (`rise_rate_min` 0.10 °C/min, τ ≈ 1030 s, `ajar_warn_temp` 8 °C
+  for a fridge cycling to ~7 °C) comes from one appliance; the docs say so honestly
+  but have no comparison data. Instrumenting a second fridge — same sensor class,
+  comparable placement, so appliance variance is not confounded with sensor or
+  placement variance — gives the first generalization test: run `calibrate_tau.py`,
+  `--rate-check` and `plot_diagnostics.py` per appliance and compare τ, the
+  compressor-cycle ceiling and the rate separation. If the defaults transfer, they
+  earn their place; if they diverge, the docs should push harder toward calibration.
+  Distinct from the aux-sensor item above: that measures *accuracy* (ground truth),
+  this measures *portability*. Practical blocker: the package hard-codes `fridge_`
+  entity names, so a second appliance needs a duplicated package with another prefix
+  — a prefix-parameterised package would be the enabling change.
 - **Humidity-based freshness inference**: open research gap, no source found —
   parked *(scout-flagged)*.
 
