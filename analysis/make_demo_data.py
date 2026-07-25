@@ -49,6 +49,14 @@ def build():
 
     idx = lambda hours: int(hours * 3600 / DT)
 
+    def ease_back(start_i, from_val, tau_s=600, span_s=2700):
+        """Crossfade from `from_val` onto the ongoing sawtooth (w: 1 -> 0).
+        span_s must be several tau_s, otherwise the window is truncated while the
+        value is still above the sawtooth and the series shows an abrupt step."""
+        for k in range(min(int(span_s / DT), n - start_i)):
+            w = np.exp(-(k * DT) / tau_s)
+            fv[start_i + k] = from_val * w + fv[start_i + k] * (1 - w)
+
     def relax_open(start_h, dur_min, target, tau_min=17):
         """Overwrite a window with a door-open excursion: relax toward `target`,
         then recover back to the sawtooth afterwards."""
@@ -58,13 +66,7 @@ def build():
         tau = tau_min * 60
         for k in range(d):
             fv[s + k] = base + (target - base) * (1 - np.exp(-(k * DT) / tau))
-        # recovery: ease back to the ongoing sawtooth over ~15 min
-        rec = idx(0) + int(15 * 60 / DT)
-        peak = fv[s + d - 1]
-        for k in range(min(rec, n - (s + d))):
-            w = np.exp(-(k * DT) / (10 * 60))
-            fv[s + d + k] = fv[s + d + k] * (1 - w) + (peak - (peak - fv[s + d + k]) ) * 0  # keep sawtooth
-            fv[s + d + k] = fv[s + d + k] + (peak - fv[s + d + k]) * w * 0.6
+        ease_back(s + d, fv[s + d - 1])
 
     def phantom(start_h, dur_min):
         """A compressor-off drift that self-triggers: a small step, then a slow
@@ -76,6 +78,7 @@ def build():
         for k in range(1, d):
             fv[s + k] = fv[s] + (top - fv[s]) * (1 - np.exp(-(k * DT) / (25 * 60)))
         fv[s + d] = fv[s + d - 1] - 0.4        # compressor kicks in -> close
+        ease_back(s + d + 1, fv[s + d], tau_s=300, span_s=1500)
 
     def grab(start_h, rise, dur_min):
         s = idx(start_h)
