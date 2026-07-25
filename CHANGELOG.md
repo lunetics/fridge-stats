@@ -3,6 +3,31 @@
 All notable changes to this project are documented in this file. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- `make_package.py`: generates a prefix-parameterised copy of the package for a second
+  appliance (`--prefix freezer`, `--lang en|de`). Entity ids in the package arise two
+  different ways — helper ids from the YAML object keys, sensor ids from the slugified
+  display names (which is why the German variant carries `sensor.kuhlschrank_*`) — so a
+  hand-duplicated copy easily leaves dangling references. The generator rewrites all id
+  families consistently, enforces that the display name's slug equals the prefix (the
+  invariant keeping name-derived sensor ids aligned with rewritten references), and
+  validates the output: every internal reference must resolve to an entity the package
+  defines, and every defined entity must carry the new prefix. Prints the blueprint-input
+  mapping for the new helper set.
+- `deploy.sh --prefix <p>`: deploys the generated package as `packages/<p>_stats.yaml`
+  alongside the stock fridge package (left untouched); blueprints are shared and refreshed
+  either way. The closing hint now names the prefixed τ helper and points to per-appliance
+  calibration instead of suggesting the reference fridge's 1028 s for every appliance.
+
+### Changed
+
+- installation.md: the second-appliance section now uses the generator instead of manual
+  block duplication, and warns that a freezer's `ajar_warn_temp` must sit far below the
+  fridge default. README, reference.md and ideas.md updated accordingly.
+
 ## [0.2.0] - 2026-07-25
 
 Two false-reading fixes to the detector's alarm and close rules, plus a diagnostic
