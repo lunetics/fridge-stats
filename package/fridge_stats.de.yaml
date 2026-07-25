@@ -25,6 +25,16 @@ input_number:
     unit_of_measurement: "°C"
     icon: mdi:home-thermometer
     mode: box
+  fridge_peak:
+    name: "Kühlschrank Spitzentemp während Öffnung"
+    # running maximum while the door is open; the close rule needs a confirmed
+    # fall below THIS, not merely below the previous report
+    min: -10
+    max: 45
+    step: 0.01
+    unit_of_measurement: "°C"
+    icon: mdi:thermometer-high
+    mode: box
   fridge_tau:
     name: "Kühlschrank Tau (Kalibrierkonstante)"
     # no initial: — value must survive restarts (recalibration!); seeded once at deploy

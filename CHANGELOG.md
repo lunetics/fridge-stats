@@ -3,6 +3,33 @@
 All notable changes to this project are documented in this file. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.5] - 2026-07-25
+
+### Added
+
+- `fall_from_peak` blueprint input (default 0.4 °C) and the `helper_peak` state helper
+  (`input_number.fridge_peak`, new in the package): the event now closes only once the interior
+  has fallen a confirmed distance below the **highest temperature reached during the opening**,
+  instead of on the first report that dips `fall_confirm` (0.05 °C) below its predecessor. A new
+  peak-tracking branch runs ahead of the close branch, so a rising report updates the peak
+  rather than being read as a close candidate. Set `fall_from_peak: 0` for the old behaviour.
+
+### Fixed
+
+- One long warm period was chopped into several short "openings". While the door is open the
+  interior sits on a plateau near room temperature, where a single noisy report 0.05 °C below
+  its predecessor satisfied the old close rule — so a cooking session was booked as a chain of
+  fragments, each with an understated duration. Measured on the reference fridge over 10 days:
+  7 of 23 booked closes carried the signature (temperature still rising afterwards and/or a
+  re-open within ~1 min); one dinner cluster was split into 5 fragments (3/3/3/7/29 min) that
+  the confirmed-fall rule merges into the single 59-minute period it was. Verified against a
+  user-confirmed real closing: the event closes 2.7 min later than before (waiting for genuine
+  cooling), still classified and alarmed correctly.
+- Knock-on: because fragments no longer hide below the 15-minute mark, the `compressor_cycle`
+  detection from 0.1.3 now catches them — 10 episodes that were counted as openings despite
+  peaking at only 5.0–7.5 °C (pure compressor sawtooth) are correctly discarded, so the
+  opening counter and total open time drop to honest values.
+
 ## [0.1.4] - 2026-07-24
 
 ### Added

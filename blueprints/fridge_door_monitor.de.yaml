@@ -74,6 +74,12 @@ blueprint:
           selector:
             entity:
               domain: input_number
+        helper_peak:
+          name: Spitzentemperatur-Helfer (laufendes Maximum während offen)
+          default: input_number.fridge_peak
+          selector:
+            entity:
+              domain: input_number
         helper_tau:
           name: Tau-Kalibrierkonstante-Helfer (Sekunden)
           default: input_number.fridge_tau
@@ -134,10 +140,25 @@ blueprint:
             number: {min: 0.1, max: 1.0, step: 0.05, unit_of_measurement: "°C"}
         fall_confirm:
           name: Abfall-Bestätigung (°C)
-          description: Ein Messwert so weit unter dem vorherigen schließt das Ereignis.
+          description: >
+            Mindest-Abfall unter den vorherigen Messwert für einen Schließ-Kandidaten.
+            Bleibt als günstiger Vorfilter; entscheidend ist fall_from_peak darunter.
           default: 0.05
           selector:
             number: {min: 0.02, max: 0.5, step: 0.01, unit_of_measurement: "°C"}
+        fall_from_peak:
+          name: Bestätigter Abfall unter die Spitze (°C)
+          description: >
+            Das Ereignis schließt erst, wenn der Innenraum so weit unter die höchste
+            während der Öffnung erreichte Temperatur gefallen ist — echtes Abkühlen,
+            keine kurzzeitige Delle. Ohne das schließt ein einzelner verrauschter
+            Messwert 0,05 °C unter seinem Vorgänger das Ereignis, während die Tür noch
+            offen ist: eine lange Warmphase (Kochsession) wird in mehrere Fragmente
+            zerhackt und jede Dauer zu kurz gebucht. 0 = altes Verhalten (nur von
+            Messwert zu Messwert).
+          default: 0.4
+          selector:
+            number: {min: 0, max: 2.0, step: 0.05, unit_of_measurement: "°C"}
         ajar_minutes:
           name: Tür-angelehnt-Warnung nach (Minuten)
           default: 15
@@ -204,12 +225,14 @@ variables:
   helper_open_seconds: !input helper_open_seconds_total
   helper_t0: !input helper_t0
   helper_troom0: !input helper_troom0
+  helper_peak: !input helper_peak
   helper_tau: !input helper_tau
   helper_opened_at: !input helper_opened_at
   door_helper: !input helper_door_open
   rise_rate_min: !input rise_rate_min
   rise_amp_min: !input rise_amp_min
   fall_confirm: !input fall_confirm
+  fall_from_peak: !input fall_from_peak
   stale_hours: !input stale_hours
   ajar_minutes: !input ajar_minutes
   ajar_warn_temp: !input ajar_warn_temp
@@ -263,6 +286,12 @@ actions:
               entity_id: !input helper_troom0
             data:
               value: "{{ states(ambient_sensor) | float(21) }}"
+          - action: input_number.set_value
+            target:
+              entity_id: !input helper_peak
+            data:
+              value: "{{ trigger.to_state.state | float(5) }}"
+            note: "Seed the running peak with the first report of the rise."
           - action: input_datetime.set_datetime
             target:
               entity_id: !input helper_opened_at
@@ -286,7 +315,27 @@ actions:
                 trigger.from_state.state | float(0)) | round(2) }} K erkannt)
               entity_id: "{{ door_helper }}"
 
-      # ---- door CLOSED: temperature falls again while considered open ----
+      # ---- still OPEN and warming: keep the running peak up to date ----
+      - conditions:
+          - condition: trigger
+            id: temp_report
+          - condition: state
+            entity_id: !input helper_door_open
+            state: "on"
+          - >-
+            {{ trigger.to_state.state not in ['unknown', 'unavailable']
+               and trigger.to_state.state | float(-99) > states(helper_peak) | float(-99) }}
+        sequence:
+          - action: input_number.set_value
+            target:
+              entity_id: !input helper_peak
+            data:
+              value: "{{ trigger.to_state.state | float(5) }}"
+        alias: Track peak while open
+        # Must precede the close branch: a rising report updates the peak instead of
+        # being evaluated as a close candidate.
+
+      # ---- door CLOSED: temperature has fallen back from its peak ----
       - conditions:
           - condition: trigger
             id: temp_report
@@ -300,11 +349,14 @@ actions:
           - >-
             {{ trigger.to_state.state | float(0)
                < trigger.from_state.state | float(0) - fall_confirm | float(0.05) }}
+          - >-
+            {{ trigger.to_state.state | float(0)
+               < states(helper_peak) | float(99) - fall_from_peak | float(0.4) }}
         sequence:
           - variables:
               t0: "{{ states(helper_t0) | float(5) }}"
               troom: "{{ states(helper_troom0) | float(21) }}"
-              peak: "{{ trigger.from_state.state | float(5) }}"
+              peak: "{{ [states(helper_peak) | float(5), trigger.from_state.state | float(5)] | max }}"
               d_t: "{{ (peak | float(5)) - (t0 | float(5)) }}"
               drive: "{{ (troom | float(21)) - (t0 | float(5)) }}"
               opened_ts: "{{ state_attr(helper_opened_at, 'timestamp') }}"
