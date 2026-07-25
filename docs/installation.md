@@ -215,14 +215,32 @@ It needs no package helpers — it is self-contained. Inputs and events:
 
 ## Monitor a second appliance (freezer)
 
-The blueprint is per-appliance; the package's helpers are one appliance's state.
+The blueprint is per-appliance; the package's helpers are one appliance's state. Do NOT
+hand-duplicate the package — entity ids in it arise two different ways (helper ids from the
+YAML keys, sensor ids from the *slugified display names*), so a manual copy easily leaves
+dangling references. `make_package.py` rewrites all id families consistently and validates
+the result (every internal reference must resolve, every entity must carry the new prefix):
 
-1. Duplicate the helper/mirror/statistics blocks in the package with a distinct prefix
-   (`freezer_` instead of `fridge_`), adjust names, restart.
+1. Generate and deploy the second package (needs `python3` with PyYAML):
+
+   ```bash
+   FRIDGE_STATS_CONFIG=<config mount> ./deploy.sh --lang en --prefix freezer
+   # or standalone, to inspect first:
+   python3 make_package.py --prefix freezer --lang en --out freezer_stats.yaml
+   ```
+
+   This writes `packages/freezer_stats.yaml` alongside the stock fridge package (which is
+   left untouched) and prints the blueprint-input mapping for the new helper set. Config
+   check, then restart (packages load at startup).
 2. Create a second automation from the same blueprint, select the freezer's sensors, and
-   point every state-helper input at the new helper set.
-3. Freezer notes: the driving force `T_room − T₀` is roughly twice a fridge's, so excursions
-   are larger; calibrate a separate τ (different air volume and sensor placement).
+   point every state-helper input at the `freezer_*` entities — the exact mapping is in the
+   generator's output.
+3. Calibrate the new appliance separately — τ, `rise_rate_min` and `ajar_warn_temp` are
+   per-appliance values, not constants (`analysis/calibrate_tau.py`, `--rate-check`,
+   `analysis/plot_diagnostics.py`). Do not copy the reference fridge's 1028 s.
+4. Freezer notes: the driving force `T_room − T₀` is roughly twice a fridge's, so excursions
+   are larger; `ajar_warn_temp` must sit far below 8 °C (a freezer's cycle ceiling is around
+   −16 °C — read yours off `plot_diagnostics.py`).
 
 ## Troubleshooting
 

@@ -65,7 +65,10 @@ another appliance.
 File: `package/fridge_stats.yaml` (English, canonical). The German variant
 `package/fridge_stats.de.yaml` is identical logic but names its mirror/statistics/utility-meter
 sensors in German — producing `sensor.kuhlschrank_*` entity ids instead of the `sensor.fridge_*`
-ids below; the `input_*`/`counter` helper ids are the same in both. State helpers store the
+ids below; the `input_*`/`counter` helper ids are the same in both. For a second appliance,
+`make_package.py --prefix <p>` generates a validated copy with every id family under the new
+prefix (see [installation.md](installation.md#monitor-a-second-appliance-freezer)); the tables
+below list the stock `fridge_` ids. State helpers store the
 detector's working state; mirror sensors expose it with `state_class` so the recorder keeps
 long-term statistics.
 

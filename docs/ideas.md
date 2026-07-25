@@ -140,9 +140,9 @@ incident: hours at 15–21 °C).
   compressor-cycle ceiling and the rate separation. If the defaults transfer, they
   earn their place; if they diverge, the docs should push harder toward calibration.
   Distinct from the aux-sensor item above: that measures *accuracy* (ground truth),
-  this measures *portability*. Practical blocker: the package hard-codes `fridge_`
-  entity names, so a second appliance needs a duplicated package with another prefix
-  — a prefix-parameterised package would be the enabling change.
+  this measures *portability*. The former blocker — the package hard-coded `fridge_`
+  entity names — is resolved: `make_package.py --prefix <p>` generates a validated
+  package copy per appliance, `deploy.sh --prefix` deploys it alongside the stock one.
 - **Humidity-based freshness inference**: open research gap, no source found —
   parked *(scout-flagged)*.
 

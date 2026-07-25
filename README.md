@@ -55,7 +55,8 @@ the full setup is still two files — see [Install](#install).
   temperature never false-alarms; fires `fridge_sensor_silent` / `fridge_sensor_recovered`.
 - **Fully configurable blueprint** (typed selectors): fridge sensor, ambient sensor, optional
   auxiliary door/motion/vibration sensor for future sensor fusion, all thresholds, alarm
-  actions. Instantiate per appliance — a freezer needs only a second helper set.
+  actions. Instantiate per appliance — `make_package.py --prefix freezer` generates the second
+  helper set as a validated package copy, and `deploy.sh --prefix` deploys it alongside.
 - **Calibration and backfill toolkit**: τ self-calibration from recorder history, threshold
   calibration (`--rate-check`), diagnostic plots (`analysis/plot_diagnostics.py`), and
   statistics backfill from the sensor's long-term statistics — Home Assistant onboard data
