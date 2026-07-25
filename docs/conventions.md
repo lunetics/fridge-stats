@@ -47,3 +47,16 @@ A claim backed by a single un-instrumented observation, a recollection, or the m
 output is **not** presented as "ground truth" or "proof". Say what the evidence actually is (a
 plausibility check, a self-consistency check, an assumption) and name what would upgrade it to
 a real validation (e.g. an auxiliary door sensor giving independent open/close truth).
+
+**Scope every claim to the sample that produced it.** Good evidence can still carry an
+overclaim: a measurement generalizes only across the factors that actually *varied* in it.
+Worked example (2026-07-25): a stopwatched 60 s opening on the second reference appliance
+yielded τ ≈ 900–1200 s, bracketing the first appliance's 1028 s — a real, well-instrumented
+result. But both appliances are the same brand (Siemens), so it supports "τ transferred
+between these two Siemens appliances", **not** "τ is portable across appliances": the data
+cannot distinguish portability from same-brand similarity. Before widening a claim, apply the
+discrimination test — *could this observation have come out differently under the rival
+explanation?* If the claim and its rivals predict the same data, the data supports none of
+them. Name the factors the sample held constant (brand, sensor model, placement, household)
+as open confounders instead of silently generalizing over them, and phrase small-n results
+as what they are: existence proofs, not distributions.
