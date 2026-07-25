@@ -120,6 +120,16 @@ incident: hours at 15–21 °C).
   continuous τ recalibration per event + resolves the sustained_warmup ambiguity
   (ajar vs warm food vs rapid cooking access) *(session-derived; the aux input
   already exists in the blueprint)*.
+- **Highest-value use is validation, not detection.** Every threshold this project
+  ships (`rise_rate_min`, `ajar_warn_temp`, `fall_from_peak`) was tuned against
+  episode labels the detector itself produced — self-referential by construction.
+  The 0.1.3/0.1.5 fixes each rested on a single user-confirmed real closing as the
+  only external anchor. Logging the aux sensor alongside the thermal detection for
+  a few weeks yields real open/close timestamps to measure what has so far only
+  been argued: the true false-positive and miss rates, the actual short-opening
+  detection floor (currently a physics estimate, never measured below 30 s), and
+  the real undercount factor. Do this *before* adding further threshold
+  parameters — it turns tuning from plausible into measured.
 - **Humidity-based freshness inference**: open research gap, no source found —
   parked *(scout-flagged)*.
 
@@ -145,6 +155,23 @@ to the community is a genuine contribution** (needs a public repo + `source_url`
   ([#763022](https://community.home-assistant.io/t/history-stats-do-not-reset-at-midnight-but-require-an-additional-event-to-reset/763022), unverified).
 - **EMA smoothing upstream of rate calculation** if noise-triggered false door
   events ever appear ([pdx.su DIY monitor](https://pdx.su/blog/2025-05-10-diy-overengineered-fridge/freezer-monitor/)).
+- **Adaptive rolling compressor ceiling** (investigated, *not* recommended as-is):
+  the idea was to replace the fixed `ajar_warn_temp` with a live estimate of the
+  normal cycle ceiling — a trailing high-percentile of the interior temperature —
+  and gate the ajar warning on "interior > ceiling + margin", self-tuning per
+  appliance and season. A per-decision-moment back-test on the reference fridge
+  (evaluating the gate at the exact ajar mark, not merely "fired sometime during
+  the episode") showed it is **not** better than the fixed threshold: the trailing
+  ceiling is contaminated by the ongoing opening — and by a recent prior opening
+  still inside its window — so it *suppressed* the ajar warning for the longest,
+  most important real opening (52 min, interior 15 °C), the worst possible miss.
+  Snapshotting the ceiling at open time did not fix it (a big opening an hour
+  earlier still poisoned the estimate). A viable version would have to build the
+  ceiling only from confirmed-closed, non-recent-event periods — materially more
+  complex — and the fixed `ajar_warn_temp` fired on every real opening in the same
+  test. Kept here as a documented dead-end so it is not re-attempted naively.
+  Illustrated in [`img/adaptive_ceiling.png`](img/adaptive_ceiling.png) (the
+  "fires anytime during the episode" view, which flatters it).
 - Temperature-based > power-based detection, with sourced counter-evidence: a
   failed compressor still draws power while cooling nothing; a user missed a real
   food-loss event on power-only monitoring —

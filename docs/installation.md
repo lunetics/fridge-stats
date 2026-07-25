@@ -132,6 +132,34 @@ door rate is not clearly above the compressor ceiling), your compressor is unusu
 the sensor reports too slowly to separate them by rate alone — fall back to a timed opening and,
 if needed, the auxiliary door sensor.
 
+### See it: `plot_diagnostics.py`
+
+`analysis/plot_diagnostics.py` renders the detector on your own data — the interior temperature
+with its compressor sawtooth, the detected openings shaded by class, and the sawtooth
+"equalized away" so real openings stand out over a flat line. It re-simulates the detector from
+the temperature series (same rules as the blueprint), so it needs no live helpers — just the
+recorder history over the REST API (read-only):
+
+```bash
+export HA_TOKEN=<long-lived access token>
+python3 analysis/plot_diagnostics.py --url http://homeassistant.local:8123 \
+    --fridge sensor.your_fridge_temperature --ambient sensor.your_room_temperature \
+    --days 10 --out diagnostics/
+```
+
+Reading your thresholds off the plots:
+
+- **`ajar_warn_temp`** — the *equalized* / *overview* plots show your normal compressor-cycle
+  ceiling (the sawtooth top). Set `ajar_warn_temp` about 0.5 °C above it: high enough that a
+  compressor cycle never reaches it, low enough that a real opening does. The default 8 °C fits
+  a fridge cycling to ~7 °C; a warmer-running fridge needs a higher value.
+- **`rise_rate_min`** — the lower rate panel shows the compressor edge versus the door-opening
+  spikes; `--rate-check` turns that separation into a recommended number.
+
+To try it without a live instance, generate a synthetic series first:
+`python3 analysis/make_demo_data.py --out demo.csv` then
+`python3 analysis/plot_diagnostics.py --from-csv demo.csv --out diagnostics/`.
+
 ## Backfill historical statistics
 
 Run this AFTER calibrating τ — the script reads the tau helper for its duration estimates.
@@ -204,7 +232,7 @@ The blueprint is per-appliance; the package's helpers are one appliance's state.
 | Openings detected but durations look wrong by a constant factor | τ is miscalibrated — run a timed opening. |
 | Short openings never appear | Expected: openings below ~15–30 s fall under the `rise_amp_min` blip threshold and are discarded ([limitations](../README.md#limitations)). |
 | Alarm fires during normal cooking sessions | Raise `ajar_minutes`, or raise `critical_temp` if your fridge runs warm. |
-| False door events from the compressor cycle | Your compressor edge is faster than the default 0.10 °C/min — run `calibrate_tau.py --rate-check` and raise `rise_rate_min` (see [Calibrate detection thresholds](#calibrate-detection-thresholds)). |
-| A long "door ajar" / over-long opening alarm when nobody opened the door | Same root cause: a compressor-off warming ramp crossed `rise_rate_min`, and because the interior keeps drifting up while the compressor is off, no "close" registers until the next cooling cycle — so a normal warm phase is booked as one long opening. Run `calibrate_tau.py --rate-check` and raise `rise_rate_min` above your compressor ceiling; if the door and compressor rate populations overlap, add the auxiliary door sensor. |
+| False door events from the compressor cycle | Your compressor edge is faster than the default 0.10 °C/min — run `calibrate_tau.py --rate-check` and raise `rise_rate_min` (see [Calibrate detection thresholds](#calibrate-detection-thresholds)). Set `ajar_warn_temp` so the resulting ramp is not counted (next row). |
+| A long "door ajar" / over-long opening alarm when nobody opened the door | A compressor-off warming ramp crossed `rise_rate_min`, and because the interior keeps drifting up while the compressor is off, no "close" registers until the next cooling cycle — so a normal warm phase sits "open" past `ajar_minutes` and raises a false ajar alarm, even though the interior never left the normal cycle band (~7–8 °C). **Primary fix: `ajar_warn_temp`** (default 8 °C) — the ajar warning fires only once the interior actually reaches that temperature, and such a long-but-cold episode is discarded on close as `compressor_cycle` (logbook note, not counted). Set it just above your normal compressor-cycle ceiling (read it off `plot_diagnostics.py`, see [Calibrate detection thresholds](#calibrate-detection-thresholds)). Optionally also raise `rise_rate_min` via `--rate-check` so the ramp is not *booked* as an opening at all; if the door and compressor rate populations overlap, add the auxiliary door sensor. |
 | Everything classified `sustained_warmup` | The ambient sensor input probably points at a wrong (e.g. outdoor) sensor, making the drive term implausible — verify both sensor inputs. |
 | False openings right after a Home Assistant restart | Not expected — the blueprint guards `unknown`/`unavailable` transitions. If observed, check whether another integration replays stale states for the sensor, and open an issue with the automation trace. |

@@ -26,6 +26,7 @@ another appliance.
 | `helper_door_open` | `input_boolean.fridge_door_open` |
 | `helper_t0` | `input_number.fridge_t0` |
 | `helper_troom0` | `input_number.fridge_troom0` |
+| `helper_peak` | `input_number.fridge_peak` |
 | `helper_tau` | `input_number.fridge_tau` |
 | `helper_opened_at` | `input_datetime.fridge_opened_at` |
 | `helper_last_duration` | `input_number.fridge_last_open_duration` |
@@ -39,8 +40,10 @@ another appliance.
 |---|---|---|
 | `rise_rate_min` | 0.10 °C/min | Minimum single-segment rise rate to consider a door opening |
 | `rise_amp_min` | 0.30 °C | Minimum total excursion; smaller rises are discarded as `blip` |
-| `fall_confirm` | 0.05 °C | A report this far below the previous one closes the event |
+| `fall_confirm` | 0.05 °C | Minimum drop below the previous report for a close candidate — a cheap first filter |
+| `fall_from_peak` | 0.4 °C | The decisive close test: the event closes only once the interior has fallen this far below the highest temperature reached during the opening (real cooling, not a transient dip). `0` restores the previous report-to-report behaviour |
 | `ajar_minutes` | 15 min | Door-open time before the ajar warning fires |
+| `ajar_warn_temp` | 8 °C (46 °F) | The ajar warning fires only once the interior actually reaches this; a long "open" whose peak never crosses it is discarded as `compressor_cycle` (not counted) — rejects a compressor-off warming ramp misread as a door left ajar. Set just above your fridge's normal compressor-cycle ceiling; the default is the EU chilled-food ceiling and sits below `critical_temp` |
 | `critical_temp` | 10 °C (50 °F) | Interior temperature that, sustained 30 min, fires the critical alarm — above the 8 °C (46 °F) EU chilled-food ceiling with a grace window, so routine restocking transients do not trip it |
 | `stale_hours` | 6 h | Closes arriving later than this after the opening are discarded (`stale_reset`) — self-heal after pausing the automation mid-event |
 
@@ -71,6 +74,7 @@ long-term statistics.
 | `input_boolean.fridge_door_open` | helper | Inferred door state; carries the logbook history |
 | `input_number.fridge_t0` | helper | Interior temperature before the current opening |
 | `input_number.fridge_troom0` | helper | Room temperature at opening |
+| `input_number.fridge_peak` | helper | Highest interior temperature reached during the current opening (drives the confirmed-fall close) |
 | `input_number.fridge_tau` | helper | Calibration constant τ in seconds |
 | `input_datetime.fridge_opened_at` | helper | Opening timestamp (last pre-rise report) |
 | `input_number.fridge_last_open_duration` | helper | Last estimated opening duration in seconds |
@@ -98,7 +102,7 @@ All events fire on the Home Assistant event bus; consume them with
 |---|---|---|
 | `fridge_door_opened` | A qualifying temperature rise starts | `t0`, `t_room`, `opened_at`, `source` |
 | `fridge_door_closed` | Temperature falls again after an opening | `duration_s`, `class`, `dt_peak`, `t0`, `peak`, `t_room`, `wall_clock_s`, `source` |
-| `fridge_door_ajar` | Door state on for `ajar_minutes` | `opened_at`, `current_temp` |
+| `fridge_door_ajar` | Door state on for `ajar_minutes` **and** interior at/above `ajar_warn_temp` | `opened_at`, `current_temp` |
 | `fridge_temp_critical` | Interior above `critical_temp` for 30 min | `current_temp` |
 | `fridge_aux_trigger` | Auxiliary sensor turns on | `entity_id`, `at` |
 
@@ -114,6 +118,7 @@ Assigned when an event closes; stored in `helper_last_class` and the
 | `extended_open` | > 90 s | τ model |
 | `sustained_warmup` | Wall-clock open ≥ `ajar_minutes` (default 15 min) or ΔT ≥ 2.5 °C — door ajar, warm food inserted, or rapid repeated access | Wall clock (the τ model does not apply to this regime) |
 | `blip` | Total rise below `rise_amp_min` | Discarded; not counted or logged |
+| `compressor_cycle` | A long "open" (≥ `ajar_minutes`) whose peak stayed below `ajar_warn_temp` — a passive compressor-off warming ramp misread as an opening, not a real door event | Discarded; logbook note, not counted |
 | `stale_reset` | Close arrived more than `stale_hours` after the recorded opening (automation paused mid-event, sensor removed) | Discarded; state reset, logbook note, not counted |
 
 ## Detection state machine
@@ -123,12 +128,19 @@ The blueprint runs in `queued` mode so sensor reports are processed strictly in 
 1. **Open**: a report arrives while the door state is off, and the rise from the previous
    report is ≥ 0.15 °C at ≥ `rise_rate_min`. The previous report supplies T₀ and the opening
    timestamp; the room temperature is snapshotted.
-2. **Close**: a report arrives while the door state is on and lies ≥ `fall_confirm` below the
-   previous one. The previous report is the peak. Duration and class are computed, counters
-   and logbook are updated, `fridge_door_closed` fires. A total rise below `rise_amp_min`
-   ends the open state silently (`blip`).
-3. **Ajar**: the door state stays on for `ajar_minutes` → `fridge_door_ajar` + warn actions.
-4. **Critical backstop**: independent of door state, interior above `critical_temp` for
+2. **Peak tracking**: while the door state is on, every report above the stored peak updates
+   `helper_peak`. This branch precedes the close branch, so a rising report can never be read
+   as a close candidate.
+3. **Close**: a report arrives while the door state is on, lies ≥ `fall_confirm` below the
+   previous one **and** ≥ `fall_from_peak` below the tracked peak — confirmed cooling rather
+   than a transient dip. Duration and class are computed from the tracked peak, counters and
+   logbook are updated, `fridge_door_closed` fires. A total rise below `rise_amp_min` ends the
+   open state silently (`blip`).
+4. **Ajar**: the door state stays on for `ajar_minutes` **and** the interior has reached
+   `ajar_warn_temp` → `fridge_door_ajar` + warn actions. If it never warmed that far, the
+   warning is suppressed (a compressor-off drift, not an open door) and the episode is
+   discarded on close as `compressor_cycle`.
+5. **Critical backstop**: independent of door state, interior above `critical_temp` for
    30 minutes → `fridge_temp_critical` + critical actions. Restart-safe because the
    `numeric_state` condition re-arms after a restart while the temperature stays high.
 
