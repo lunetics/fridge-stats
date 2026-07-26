@@ -78,6 +78,12 @@ counter:
     name: "Kühlschrank Öffnungen gesamt"
     icon: mdi:counter
     restore: true
+  fridge_short_grabs_total:
+    # sub-floor openings booked by the OPTIONAL humidity companion blueprint
+    # (fridge_humidity_monitor); stays at 0 without it
+    name: "Kühlschrank Kurzöffnungen gesamt"
+    icon: mdi:counter
+    restore: true
 
 # Mirror sensors: expose helper values as proper sensors so that recorder LTS,
 # the statistics platform and utility_meter can consume them.
@@ -106,6 +112,12 @@ template:
         icon: mdi:counter
         availability: "{{ has_value('counter.fridge_openings_total') }}"
         state: "{{ states('counter.fridge_openings_total') | int(0) }}"
+      - name: "Kühlschrank Kurzöffnungen"
+        unique_id: fridge_short_grabs
+        state_class: total_increasing
+        icon: mdi:water-percent
+        availability: "{{ has_value('counter.fridge_short_grabs_total') }}"
+        state: "{{ states('counter.fridge_short_grabs_total') | int(0) }}"
       - name: "Kühlschrank Tür Öffnungszeit gesamt"
         unique_id: fridge_door_open_seconds_total
         unit_of_measurement: "s"
@@ -222,3 +234,7 @@ utility_meter:
     name: "Kühlschrank Öffnungszeit Monat"
     source: sensor.kuhlschrank_tur_offnungszeit_gesamt
     cycle: monthly
+  fridge_short_grabs_daily:
+    name: "Kühlschrank Kurzöffnungen heute"
+    source: sensor.kuhlschrank_kurzoffnungen
+    cycle: daily

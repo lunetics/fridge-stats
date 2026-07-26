@@ -56,6 +56,9 @@ BLUEPRINT_MAP = [
     ("helper_last_class", "input_text", "last_event_class"),
     ("counter_openings", "counter", "openings_total"),
     ("helper_open_seconds_total", "input_number", "open_seconds_total"),
+    # fridge_humidity_monitor only (door monitor ignores it); its other two
+    # helper inputs (helper_door_open, helper_last_class) are listed above
+    ("counter_short_grabs", "counter", "short_grabs_total"),
 ]
 
 TRANSLIT = str.maketrans({"ä": "a", "ö": "o", "ü": "u", "ß": "ss",
@@ -167,8 +170,9 @@ def main():
     else:
         sys.stdout.write(out_text)
 
-    print(f"\nBlueprint inputs for the '{display}' automation "
-          f"(create from fridge_door_monitor, State helpers section):", file=sys.stderr)
+    print(f"\nBlueprint inputs for the '{display}' automations "
+          f"(fridge_door_monitor — and fridge_humidity_monitor if used; "
+          f"State helpers section):", file=sys.stderr)
     for inp, domain, suffix in BLUEPRINT_MAP:
         print(f"  {inp:26} -> {domain}.{prefix}_{suffix}", file=sys.stderr)
     print("Remember: Home Assistant restart required (packages load at startup).",

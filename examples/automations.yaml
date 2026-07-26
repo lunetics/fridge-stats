@@ -31,6 +31,16 @@
               Interior above the critical temperature for 30 min - door left
               open or appliance fault.
 
+- id: fridge_humidity_monitor
+  alias: "Fridge: humidity grab monitor (fridge-stats)"
+  use_blueprint:
+    path: fridge_stats/fridge_humidity_monitor.yaml
+    input:
+      humidity_sensor: sensor.fridge_humidity
+      # state helpers default to the stock package (door-open boolean, last-class
+      # text, short-grab counter); thresholds are per-appliance - see
+      # docs/installation.md "Humidity short-grab channel".
+
 - id: fridge_sensor_watchdog
   alias: "Fridge: sensor watchdog (fridge-stats)"
   use_blueprint:
@@ -57,7 +67,9 @@
 # --- Second appliance (generated package, e.g. make_package.py --prefix freezer) ---
 # The door monitor must point EVERY state-helper input at the generated helper set;
 # deploy.sh --prefix / make_package.py print exactly this mapping. The watchdog holds
-# no state - only the monitored sensor changes.
+# no state - only the monitored sensor changes. The humidity monitor needs its three
+# helper inputs remapped (freezer_door_open / freezer_last_event_class /
+# freezer_short_grabs_total) - same pattern, omitted here for brevity.
 
 - id: freezer_door_monitor
   alias: "Freezer: door monitor (fridge-stats)"

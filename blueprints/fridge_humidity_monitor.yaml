@@ -1,0 +1,198 @@
+blueprint:
+  name: Fridge Humidity Grab Monitor (fridge-stats)
+  description: >
+    Optional companion to the Fridge Door Monitor: books door openings BELOW
+    the temperature detection floor ("short grabs") from the humidity channel.
+    Room air carries far more absolute moisture than the dried fridge air, so
+    even a stopwatched 5 s grab that left zero trace on the temperature channel
+    spiked relative humidity by +12 %RH within a single report (reference
+    measurement, 2026-07-25). The evaporator's own moisture cycle moves
+    humidity almost as FAR but far slower (reference ≈ +0.05 %RH/s vs door
+    ≥ +0.29 %RH/s), so detection gates on RATE plus single-report amplitude —
+    the temperature detector's trick, applied to the other channel. If the
+    door-state helper turns on during the claim window, the temperature
+    channel owns the event (a real, longer opening) and this automation stays
+    silent: it counts ONLY sub-floor grabs, in their own class and counter
+    (short_grab), without a duration estimate — the temperature never moved,
+    so the tau inversion has nothing to invert. Requires a humidity sensor
+    INSIDE the fridge (combined temp/humidity devices report both). Reference
+    values were measured on one appliance/sensor pair — calibrate per
+    appliance. Barometric pressure is NOT a confounder: an 11-day check found
+    zero correlation between room-barometer changes and in-fridge humidity
+    rates (r ≈ −0.03); the humidity–pressure co-movement that does exist is
+    fridge-internal vapor-pressure transience, i.e. a co-symptom of the same
+    events, not a false-trigger source.
+  domain: automation
+  author: lunetics
+  source_url: https://github.com/lunetics/fridge-stats/blob/main/blueprints/fridge_humidity_monitor.yaml
+  homeassistant:
+    min_version: "2026.6.0"
+  input:
+    sensors:
+      name: Sensor
+      icon: mdi:water-percent
+      input:
+        humidity_sensor:
+          name: Fridge humidity sensor
+          description: >
+            Humidity sensor INSIDE the fridge — typically the same combined
+            device as the door monitor's temperature sensor.
+          selector:
+            entity:
+              domain: sensor
+              device_class: humidity
+    state_helpers:
+      name: State helpers (defaults = fridge-stats package)
+      icon: mdi:database
+      collapsed: true
+      input:
+        helper_door_open:
+          name: Door-state boolean (read-only here)
+          description: >
+            The door monitor's detected door state. Used twice: a grab is only
+            considered while it is off, and if it turns on during the claim
+            window the opening belongs to the temperature channel.
+          default: input_boolean.fridge_door_open
+          selector:
+            entity:
+              domain: input_boolean
+        helper_last_class:
+          name: Last-event-class helper
+          default: input_text.fridge_last_event_class
+          selector:
+            entity:
+              domain: input_text
+        counter_short_grabs:
+          name: Short-grab counter
+          default: counter.fridge_short_grabs_total
+          selector:
+            entity:
+              domain: counter
+    thresholds:
+      name: Detection thresholds
+      icon: mdi:tune
+      collapsed: true
+      input:
+        grab_rate_min:
+          name: Minimum humidity rise rate (%RH/s)
+          description: >
+            Reference appliance: the slowest stopwatched door event reached
+            +0.29 %RH/s while the evaporator moisture cycle stayed at
+            ≈ +0.05 %RH/s — 0.2 sits between the two with margin toward the
+            slowest real event. MEASURED on one appliance, not universal;
+            check your own per-report rates before trusting the default.
+          default: 0.2
+          selector:
+            number: {min: 0.05, max: 2.0, step: 0.05, unit_of_measurement: "%RH/s"}
+        grab_amp_min:
+          name: Minimum single-step rise (%RH)
+          description: >
+            Rise between two consecutive reports below this is sensor noise or
+            slow drift, never a door (reference door events: +7 to +33 %RH).
+          default: 4
+          selector:
+            number: {min: 1, max: 20, step: 0.5, unit_of_measurement: "%RH"}
+        max_report_gap:
+          name: Maximum report gap (s)
+          description: >
+            A rise spread over a longer gap between reports has no meaningful
+            rate — it is skipped rather than misread (reference sensor report
+            spacing: 10–150 s).
+          default: 180
+          selector:
+            number: {min: 30, max: 900, step: 10, unit_of_measurement: s}
+        claim_wait_minutes:
+          name: Temperature-claim window (minutes)
+          description: >
+            How long to wait for the temperature channel to claim the event
+            (the door-state helper turning on) before booking a short grab.
+            Must cover your temperature sensor's reaction lag to a real
+            opening; on the reference appliances the claim arrived within
+            ~2 minutes. Longer windows also merge grabs that follow each other
+            within the window into one booking.
+          default: 5
+          selector:
+            number: {min: 2, max: 60, step: 1, unit_of_measurement: min}
+
+# mode single + silent: the aftershock reports of the SAME grab (a smaller
+# +1–2 %RH step usually follows within seconds) arrive while the first run is
+# still inside its claim window — they must fold into that episode, not queue
+# behind it as separate runs (queued would book one grab per aftershock).
+mode: single
+max_exceeded: silent
+
+variables:
+  hum_sensor: !input humidity_sensor
+  door_helper: !input helper_door_open
+  grab_rate_min: !input grab_rate_min
+  grab_amp_min: !input grab_amp_min
+  max_report_gap: !input max_report_gap
+  from_ok: >-
+    {{ trigger.from_state is not none
+       and trigger.from_state.state not in ['unavailable', 'unknown']
+       and trigger.to_state.state not in ['unavailable', 'unknown'] }}
+  d_rh: >-
+    {{ (trigger.to_state.state | float(0)) - (trigger.from_state.state | float(0))
+       if from_ok else 0 }}
+  # last_reported, not last_changed: the rate base is the time since the
+  # PREVIOUS REPORT — a value that merely repeated earlier must not stretch
+  # the window and dilute a real jump into a sub-threshold rate.
+  gap_s: >-
+    {{ (trigger.to_state.last_reported - trigger.from_state.last_reported).total_seconds()
+       if from_ok else 0 }}
+  rate_rh_s: "{{ (d_rh / gap_s) if (gap_s | float(0)) > 0 else 0 }}"
+
+triggers:
+  - trigger: state
+    entity_id: !input humidity_sensor
+
+conditions:
+  - "{{ from_ok }}"
+  # while the door state is on, every humidity move belongs to that opening
+  - condition: state
+    entity_id: !input helper_door_open
+    state: "off"
+  - "{{ d_rh | float(0) >= grab_amp_min | float(4) }}"
+  - "{{ (gap_s | float(0)) > 0 and (gap_s | float(0)) <= max_report_gap | float(180) }}"
+  - "{{ rate_rh_s | float(0) >= grab_rate_min | float(0.2) }}"
+
+actions:
+  # Claim window: a real (longer) opening spikes humidity FIRST and moves the
+  # temperature a report or two later — give the temperature channel time to
+  # claim the event before booking. A second REAL opening inside the window
+  # also lands here and suppresses the pending grab — accepted: it books as a
+  # regular opening, only the preceding grab goes uncounted.
+  - wait_for_trigger:
+      - trigger: state
+        entity_id: !input helper_door_open
+        to: "on"
+    timeout:
+      minutes: !input claim_wait_minutes
+    continue_on_timeout: true
+  - if:
+      - "{{ wait.trigger is not none }}"
+    then:
+      - stop: "temperature channel claimed the opening — not a sub-floor grab"
+  - action: counter.increment
+    target:
+      entity_id: !input counter_short_grabs
+  - action: input_text.set_value
+    target:
+      entity_id: !input helper_last_class
+    data:
+      value: short_grab
+  - event: fridge_short_grab
+    event_data:
+      entity_id: "{{ hum_sensor }}"
+      d_rh: "{{ d_rh | float(0) | round(1) }}"
+      window_s: "{{ gap_s | float(0) | round(0) }}"
+      rate_rh_s: "{{ rate_rh_s | float(0) | round(3) }}"
+      humidity: "{{ trigger.to_state.state | float(0) }}"
+      source: humidity
+  - action: logbook.log
+    data:
+      name: Fridge
+      message: >-
+        Short grab booked (+{{ d_rh | float(0) | round(1) }} %RH in
+        {{ gap_s | float(0) | round(0) }} s — below the temperature detection floor)
+      entity_id: "{{ door_helper }}"

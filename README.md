@@ -36,11 +36,12 @@ the full setup is still two files — see [Install](#install).
 - **Physical duration model**: `t_open = −τ · ln(1 − ΔT_peak / (T_room − T₀))` — the ambient
   sensor supplies the thermal driving force, so a summer opening and a winter opening of equal
   length score equally.
-- **Five bus events** with data payloads: `fridge_door_opened`, `fridge_door_closed`,
-  `fridge_door_ajar`, `fridge_temp_critical`, `fridge_aux_trigger`
+- **Six bus events** with data payloads: `fridge_door_opened`, `fridge_door_closed`,
+  `fridge_door_ajar`, `fridge_temp_critical`, `fridge_aux_trigger`, `fridge_short_grab`
   ([reference](docs/reference.md#events)).
 - **Event classes**: `quick_grab` / `normal_grab` / `extended_open` / `sustained_warmup`
-  (door ajar, warm food, or rapid repeated access) / `blip` and `compressor_cycle` (discarded).
+  (door ajar, warm food, or rapid repeated access) / `short_grab` (humidity channel) /
+  `blip` and `compressor_cycle` (discarded).
 - **Logbook history**: every opening, closing, and alarm writes a logbook entry on the
   door-state entity.
 - **Statistics layer**: total and daily/weekly/monthly opening counts, accumulated open time,
@@ -53,6 +54,12 @@ the full setup is still two files — see [Install](#install).
   the fridge sensor stops reporting for a configurable time (default 3 h) — a battery dead in
   the cold or a dropped link otherwise fails invisibly. Uses `last_reported`, so a steady
   temperature never false-alarms; fires `fridge_sensor_silent` / `fridge_sensor_recovered`.
+- **Humidity short-grab channel** (optional companion blueprint `fridge_humidity_monitor.yaml`):
+  counts openings BELOW the temperature detection floor. A stopwatched 5 s grab left zero
+  temperature trace but spiked humidity +12 %RH in one report; the evaporator's moisture cycle
+  moves as far but far slower, so the detector gates on rate + amplitude and books `short_grab`
+  only when the temperature channel does not claim the event. Reference backtest (11 days):
+  4.0 grabs/day on top of the temperature-detected openings, zero compressor false-bookings.
 - **Fully configurable blueprint** (typed selectors): fridge sensor, ambient sensor, optional
   auxiliary door/motion/vibration sensor for future sensor fusion, all thresholds, alarm
   actions. Instantiate per appliance — `make_package.py --prefix freezer` generates the second

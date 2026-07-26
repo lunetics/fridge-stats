@@ -43,7 +43,8 @@ else
 fi
 cp "$HERE/blueprints/fridge_door_monitor${SFX}.yaml" "$CFG/blueprints/automation/fridge_stats/fridge_door_monitor.yaml"
 cp "$HERE/blueprints/fridge_sensor_watchdog${SFX}.yaml" "$CFG/blueprints/automation/fridge_stats/fridge_sensor_watchdog.yaml"
-echo "deployed (${LANG_VARIANT}): ${PKG_MSG} + blueprints/automation/fridge_stats/{fridge_door_monitor,fridge_sensor_watchdog}.yaml"
+cp "$HERE/blueprints/fridge_humidity_monitor${SFX}.yaml" "$CFG/blueprints/automation/fridge_stats/fridge_humidity_monitor.yaml"
+echo "deployed (${LANG_VARIANT}): ${PKG_MSG} + blueprints/automation/fridge_stats/{fridge_door_monitor,fridge_sensor_watchdog,fridge_humidity_monitor}.yaml"
 
 grep -q 'packages: !include_dir_named packages' "$CFG/configuration.yaml" \
   && echo "configuration.yaml: packages include present" \

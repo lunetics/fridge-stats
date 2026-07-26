@@ -1,0 +1,202 @@
+blueprint:
+  name: Kühlschrank-Feuchte-Monitor für Kurzöffnungen (fridge-stats)
+  description: >
+    Optionaler Begleiter des Kühlschrank-Tür-Monitors: bucht Türöffnungen
+    UNTERHALB der Temperatur-Erkennungsgrenze („Kurzöffnungen") aus dem
+    Feuchte-Kanal. Raumluft trägt weit mehr absolute Feuchte als die
+    getrocknete Kühlschrankluft — selbst eine gestoppte 5-s-Öffnung, die auf
+    dem Temperaturkanal spurlos blieb, sprang um +12 %RH innerhalb eines
+    einzigen Reports (Referenzmessung 25.07.2026). Der Feuchte-Zyklus des
+    Verdampfers bewegt die Feuchte fast genauso WEIT, aber deutlich langsamer
+    (Referenz ≈ +0,05 %RH/s vs. Tür ≥ +0,29 %RH/s) — die Erkennung gattert
+    daher auf RATE plus Einzelschritt-Amplitude, der Trick des
+    Temperatur-Detektors auf dem anderen Kanal. Schaltet der Türzustand-Helfer
+    im Claim-Fenster auf an, gehört das Ereignis dem Temperaturkanal (eine
+    echte, längere Öffnung) und diese Automation bleibt still: Sie zählt NUR
+    Öffnungen unter der Temperatur-Grenze, in eigener Klasse und eigenem
+    Zähler (short_grab), ohne Dauerschätzung — die Temperatur hat sich nie
+    bewegt, die Tau-Inversion hat nichts zu invertieren. Benötigt einen
+    Feuchtesensor IM Kühlschrank (Kombi-Sensoren liefern beides). Die
+    Referenzwerte stammen von einem Gerät/Sensor-Paar — pro Gerät
+    kalibrieren. Luftdruck ist KEIN Störfaktor: Ein 11-Tage-Check fand null
+    Korrelation zwischen Raum-Barometer-Änderungen und Feuchteraten im
+    Kühlschrank (r ≈ −0,03); die real existierende Feuchte-Druck-Kopplung ist
+    kühlschrank-interne Dampfdruck-Transiente, also Ko-Symptom derselben
+    Ereignisse, keine Fehlauslöser-Quelle.
+  domain: automation
+  author: lunetics
+  source_url: https://github.com/lunetics/fridge-stats/blob/main/blueprints/fridge_humidity_monitor.de.yaml
+  homeassistant:
+    min_version: "2026.6.0"
+  input:
+    sensors:
+      name: Sensor
+      icon: mdi:water-percent
+      input:
+        humidity_sensor:
+          name: Kühlschrank-Feuchtesensor
+          description: >
+            Feuchtesensor IM Kühlschrank — typischerweise dasselbe Kombi-Gerät
+            wie der Temperatursensor des Tür-Monitors.
+          selector:
+            entity:
+              domain: sensor
+              device_class: humidity
+    state_helpers:
+      name: Zustands-Helfer (Defaults = fridge-stats-Package)
+      icon: mdi:database
+      collapsed: true
+      input:
+        helper_door_open:
+          name: Türzustand-Boolean (hier nur lesend)
+          description: >
+            Der erkannte Türzustand des Tür-Monitors. Zweifach genutzt: Eine
+            Kurzöffnung wird nur betrachtet, solange er aus ist — und schaltet
+            er im Claim-Fenster auf an, gehört die Öffnung dem Temperaturkanal.
+          default: input_boolean.fridge_door_open
+          selector:
+            entity:
+              domain: input_boolean
+        helper_last_class:
+          name: Letzte-Ereignisklasse-Helfer
+          default: input_text.fridge_last_event_class
+          selector:
+            entity:
+              domain: input_text
+        counter_short_grabs:
+          name: Kurzöffnungs-Zähler
+          default: counter.fridge_short_grabs_total
+          selector:
+            entity:
+              domain: counter
+    thresholds:
+      name: Erkennungs-Schwellen
+      icon: mdi:tune
+      collapsed: true
+      input:
+        grab_rate_min:
+          name: Minimale Feuchte-Anstiegsrate (%RH/s)
+          description: >
+            Referenzgerät: Das langsamste gestoppte Tür-Ereignis erreichte
+            +0,29 %RH/s, der Verdampfer-Feuchtezyklus blieb bei ≈ +0,05 %RH/s
+            — 0,2 liegt dazwischen mit Marge zum langsamsten echten Ereignis.
+            GEMESSEN an einem Gerät, nicht universell; prüfe die eigenen
+            Per-Report-Raten, bevor du dem Default vertraust.
+          default: 0.2
+          selector:
+            number: {min: 0.05, max: 2.0, step: 0.05, unit_of_measurement: "%RH/s"}
+        grab_amp_min:
+          name: Minimaler Einzelschritt-Anstieg (%RH)
+          description: >
+            Ein Anstieg zwischen zwei aufeinanderfolgenden Reports darunter ist
+            Sensorrauschen oder langsame Drift, nie eine Tür (Referenz-
+            Türereignisse: +7 bis +33 %RH).
+          default: 4
+          selector:
+            number: {min: 1, max: 20, step: 0.5, unit_of_measurement: "%RH"}
+        max_report_gap:
+          name: Maximale Report-Lücke (s)
+          description: >
+            Ein über eine längere Report-Lücke verteilter Anstieg hat keine
+            aussagekräftige Rate — er wird übersprungen statt fehlgedeutet
+            (Referenzsensor-Report-Abstände: 10–150 s).
+          default: 180
+          selector:
+            number: {min: 30, max: 900, step: 10, unit_of_measurement: s}
+        claim_wait_minutes:
+          name: Temperatur-Claim-Fenster (Minuten)
+          description: >
+            Wie lange auf den Temperaturkanal gewartet wird (Türzustand-Helfer
+            schaltet an), bevor eine Kurzöffnung gebucht wird. Muss die
+            Reaktionsverzögerung deines Temperatursensors auf eine echte
+            Öffnung abdecken; an den Referenzgeräten kam der Claim binnen
+            ~2 Minuten. Längere Fenster verschmelzen zudem kurz
+            aufeinanderfolgende Kurzöffnungen zu einer Buchung.
+          default: 5
+          selector:
+            number: {min: 2, max: 60, step: 1, unit_of_measurement: min}
+
+# mode single + silent: Die Nachbeben-Reports DERSELBEN Kurzöffnung (ein
+# kleinerer +1–2-%RH-Schritt folgt meist binnen Sekunden) treffen ein, während
+# der erste Lauf noch im Claim-Fenster steht — sie müssen in diese Episode
+# einfließen, nicht als eigene Läufe dahinter anstehen (queued würde pro
+# Nachbeben eine Kurzöffnung buchen).
+mode: single
+max_exceeded: silent
+
+variables:
+  hum_sensor: !input humidity_sensor
+  door_helper: !input helper_door_open
+  grab_rate_min: !input grab_rate_min
+  grab_amp_min: !input grab_amp_min
+  max_report_gap: !input max_report_gap
+  from_ok: >-
+    {{ trigger.from_state is not none
+       and trigger.from_state.state not in ['unavailable', 'unknown']
+       and trigger.to_state.state not in ['unavailable', 'unknown'] }}
+  d_rh: >-
+    {{ (trigger.to_state.state | float(0)) - (trigger.from_state.state | float(0))
+       if from_ok else 0 }}
+  # last_reported, nicht last_changed: Die Ratenbasis ist die Zeit seit dem
+  # VORIGEN REPORT — ein bloß wiederholter Wert darf das Fenster nicht strecken
+  # und einen echten Sprung unter die Raten-Schwelle verdünnen.
+  gap_s: >-
+    {{ (trigger.to_state.last_reported - trigger.from_state.last_reported).total_seconds()
+       if from_ok else 0 }}
+  rate_rh_s: "{{ (d_rh / gap_s) if (gap_s | float(0)) > 0 else 0 }}"
+
+triggers:
+  - trigger: state
+    entity_id: !input humidity_sensor
+
+conditions:
+  - "{{ from_ok }}"
+  # solange der Türzustand an ist, gehört jede Feuchtebewegung dieser Öffnung
+  - condition: state
+    entity_id: !input helper_door_open
+    state: "off"
+  - "{{ d_rh | float(0) >= grab_amp_min | float(4) }}"
+  - "{{ (gap_s | float(0)) > 0 and (gap_s | float(0)) <= max_report_gap | float(180) }}"
+  - "{{ rate_rh_s | float(0) >= grab_rate_min | float(0.2) }}"
+
+actions:
+  # Claim-Fenster: Eine echte (längere) Öffnung spikt ZUERST die Feuchte und
+  # bewegt die Temperatur ein bis zwei Reports später — dem Temperaturkanal
+  # Zeit zum Claimen geben, bevor gebucht wird. Auch eine zweite ECHTE Öffnung
+  # im Fenster landet hier und unterdrückt die anstehende Kurzöffnung —
+  # akzeptiert: Sie wird als reguläre Öffnung gebucht, nur die vorangegangene
+  # Kurzöffnung bleibt ungezählt.
+  - wait_for_trigger:
+      - trigger: state
+        entity_id: !input helper_door_open
+        to: "on"
+    timeout:
+      minutes: !input claim_wait_minutes
+    continue_on_timeout: true
+  - if:
+      - "{{ wait.trigger is not none }}"
+    then:
+      - stop: "Temperaturkanal hat die Öffnung geclaimt — keine Kurzöffnung"
+  - action: counter.increment
+    target:
+      entity_id: !input counter_short_grabs
+  - action: input_text.set_value
+    target:
+      entity_id: !input helper_last_class
+    data:
+      value: short_grab
+  - event: fridge_short_grab
+    event_data:
+      entity_id: "{{ hum_sensor }}"
+      d_rh: "{{ d_rh | float(0) | round(1) }}"
+      window_s: "{{ gap_s | float(0) | round(0) }}"
+      rate_rh_s: "{{ rate_rh_s | float(0) | round(3) }}"
+      humidity: "{{ trigger.to_state.state | float(0) }}"
+      source: humidity
+  - action: logbook.log
+    data:
+      name: Kühlschrank
+      message: >-
+        Kurzöffnung gebucht (+{{ d_rh | float(0) | round(1) }} %RH in
+        {{ gap_s | float(0) | round(0) }} s — unter der Temperatur-Erkennungsgrenze)
+      entity_id: "{{ door_helper }}"

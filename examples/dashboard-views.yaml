@@ -50,6 +50,10 @@ views:
       name: Öffnungen gesamt
     - entity: sensor.kuhlschrank_offnungszeit_gesamt_lesbar
       name: Öffnungszeit gesamt
+    - entity: sensor.kuhlschrank_kurzoffnungen_heute
+      name: Kurzöffnungen heute (Feuchte-Kanal)
+    - entity: sensor.kuhlschrank_kurzoffnungen
+      name: Kurzöffnungen gesamt (Feuchte-Kanal)
   - type: statistics-graph
     title: Öffnungen pro Tag (30 Tage)
     chart_type: bar
@@ -116,6 +120,10 @@ views:
       name: Openings total
     - entity: sensor.fridge_open_time_total_readable
       name: Open time total
+    - entity: sensor.fridge_short_grabs_today
+      name: Short grabs today (humidity channel)
+    - entity: sensor.fridge_short_grabs
+      name: Short grabs total (humidity channel)
   - type: statistics-graph
     title: Openings per day (30 d)
     chart_type: bar

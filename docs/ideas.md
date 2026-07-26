@@ -143,8 +143,14 @@ incident: hours at 15–21 °C).
   this measures *portability*. The former blocker — the package hard-coded `fridge_`
   entity names — is resolved: `make_package.py --prefix <p>` generates a validated
   package copy per appliance, `deploy.sh --prefix` deploys it alongside the stock one.
-- **Optional humidity channel (`fridge_humidity_sensor` input) — strongest fusion
-  candidate, now ground-truth-backed.** Three controlled observations on the second
+- **Optional humidity channel — ✅ shipped in 0.4.0 as the `fridge_humidity_monitor`
+  companion blueprint** (rate + amplitude gates, claim window, own `short_grab`
+  class/counter; 11-day kitchen backtest: 4.0 grabs/day, zero night bookings). A
+  pressure-confounder check preceded the build: weather-scale barometric changes are
+  uncorrelated with in-fridge humidity rates (r ≈ −0.03 vs a room barometer), and the
+  real humidity–pressure co-movement is internal vapor-pressure transience (fridge-minus-room
+  differences r ≈ +0.6) — a co-symptom, not a trigger risk. Original evidence and design
+  sketch below. Three controlled observations on the second
   reference appliance (2026-07-25, user-stopwatched): a **5 s** grab was completely
   invisible on the temperature channel (not a single report delta — first controlled
   confirmation of the censored minimum) while humidity spiked 28→49 %RH within 20 s;
@@ -161,7 +167,6 @@ incident: hours at 15–21 °C).
   sensors can saturate in fridges — validate against the aux door sensor when it
   exists. Scope note: both reference appliances are the same brand (Siemens); none of
   this measures cross-brand behaviour.
-  parked *(scout-flagged)*.
 
 ## 8. Community prior-art
 

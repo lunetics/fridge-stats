@@ -83,15 +83,18 @@ long-term statistics.
 | `input_number.fridge_last_open_duration` | helper | Last estimated opening duration in seconds |
 | `input_text.fridge_last_event_class` | helper | Last event class |
 | `counter.fridge_openings_total` | helper | Openings since installation |
+| `counter.fridge_short_grabs_total` | helper | Sub-floor openings booked by the optional humidity monitor; stays at 0 without it |
 | `input_number.fridge_open_seconds_total` | helper | Accumulated open seconds |
 | `sensor.fridge_door_last_opening_duration` | template mirror | Last duration, `measurement` — event-gated: available only for ~1 h after an opening, so its long-term statistics contain event hours only |
 | `sensor.fridge_door_openings_total` | template mirror | Opening count, `total_increasing` |
 | `sensor.fridge_door_open_time_total` | template mirror | Open seconds, `total_increasing` |
+| `sensor.fridge_short_grabs` | template mirror | Short-grab count, `total_increasing` |
 | `sensor.fridge_door_state` | template | `open`/`closed` plus last class, duration, timestamp as attributes |
 | `sensor.fridge_opening_duration_median_7d` | statistics | Median opening duration over 7 days |
 | `sensor.fridge_opening_duration_max_7d` | statistics | Maximum opening duration over 7 days |
 | `sensor.fridge_openings_today` / `_week` / `_month` | utility_meter | Opening counts per day/week/month |
 | `sensor.fridge_open_time_today` / `_month` | utility_meter | Open time per day/month |
+| `sensor.fridge_short_grabs_today` | utility_meter | Short grabs per day |
 | `sensor.fridge_open_time_today_readable` / `_month_readable` / `_total_readable` | template display | Human-readable duration strings ("42 s" / "26 min" / "9.9 h") for dashboard rows |
 | `sensor.fridge_last_opening_duration_readable` | template display | Last duration, human-readable |
 | `sensor.fridge_opening_duration_median_7d_readable` / `_max_7d_readable` | template display | 7-day median/max, human-readable |
@@ -108,6 +111,7 @@ All events fire on the Home Assistant event bus; consume them with
 | `fridge_door_ajar` | Door state on for `ajar_minutes` **and** interior at/above `ajar_warn_temp` | `opened_at`, `current_temp` |
 | `fridge_temp_critical` | Interior above `critical_temp` for 30 min | `current_temp` |
 | `fridge_aux_trigger` | Auxiliary sensor turns on | `entity_id`, `at` |
+| `fridge_short_grab` | The optional humidity monitor books a sub-floor opening ([below](#humidity-grab-monitor)) | `entity_id`, `d_rh`, `window_s`, `rate_rh_s`, `humidity`, `source` |
 
 ## Event classes
 
@@ -123,6 +127,7 @@ Assigned when an event closes; stored in `helper_last_class` and the
 | `blip` | Total rise below `rise_amp_min` | Discarded; not counted or logged |
 | `compressor_cycle` | A long "open" (≥ `ajar_minutes`) whose peak stayed below `ajar_warn_temp` — a passive compressor-off warming ramp misread as an opening, not a real door event | Discarded; logbook note, not counted |
 | `stale_reset` | Close arrived more than `stale_hours` after the recorded opening (automation paused mid-event, sensor removed) | Discarded; state reset, logbook note, not counted |
+| `short_grab` | Booked by the optional humidity monitor: a humidity-rate spike with the door state off that the temperature channel did not claim within the claim window — an opening below the temperature detection floor | None — the temperature never moved, so the τ inversion has nothing to invert; counted in its own counter |
 
 ## Detection state machine
 
@@ -178,6 +183,42 @@ Detection is on the alive→silent transition. A still-silent sensor re-alerts ~
 after each Home Assistant restart (every entity's `last_reported` resets at startup); the one
 uncovered case — reloading the automation while the sensor is already past the threshold —
 self-heals on the next restart.
+
+## Humidity grab monitor
+
+An optional companion blueprint, `blueprints/fridge_humidity_monitor.yaml`, books openings
+BELOW the temperature detection floor ("short grabs") from a humidity sensor inside the
+fridge. Room air carries far more absolute moisture than the dried fridge air, so even a
+stopwatched 5 s grab that left zero trace on the temperature channel spiked relative humidity
+by +12 %RH within a single report. The evaporator's own moisture cycle moves humidity almost
+as far but far slower, so detection gates on rate plus single-report amplitude. If the door
+state turns on during the claim window, the temperature channel owns the event and the
+monitor stays silent — it counts only sub-floor grabs, without a duration estimate.
+
+### Humidity monitor inputs
+
+| Input | Required | Default | Purpose |
+|---|---|---|---|
+| `humidity_sensor` | yes | — | Humidity sensor inside the fridge |
+| `helper_door_open` | no | `input_boolean.fridge_door_open` | Door state; read-only here (grab gate + claim detection) |
+| `helper_last_class` | no | `input_text.fridge_last_event_class` | Receives `short_grab` on booking |
+| `counter_short_grabs` | no | `counter.fridge_short_grabs_total` | Incremented per booked grab |
+| `grab_rate_min` | no | 0.2 %RH/s | Minimum rise rate between two reports (reference: slowest stopwatched door event +0.29, evaporator cycle ≈ +0.05) |
+| `grab_amp_min` | no | 4 %RH | Minimum single-step rise; smaller steps are noise/drift |
+| `max_report_gap` | no | 180 s | Rises spread over longer report gaps have no meaningful rate and are skipped |
+| `claim_wait_minutes` | no | 5 min | Wait for the temperature channel to claim before booking (reference claims arrived within 71 s) |
+
+Behaviour notes: the blueprint runs `mode: single` with `max_exceeded: silent` on purpose —
+the aftershock reports of the same grab arrive during the claim window and must fold into
+that episode instead of booking again. A second real opening inside the claim window
+suppresses the pending grab (it books as a regular opening; only the preceding grab goes
+uncounted), and a Home Assistant restart during the claim window drops the pending grab.
+Validation on the reference kitchen (11 days): 4.0 booked grabs/day on top of 3.3
+temperature-detected openings/day, zero bookings between 01:00 and 05:00 — the compressor's
+humidity cycle never triggered. Barometric pressure is not a confounder: room-barometer
+changes showed zero correlation with in-fridge humidity rates (r ≈ −0.03 over the same
+11 days); the in-fridge humidity–pressure co-movement that does exist is internal
+vapor-pressure transience, a co-symptom of the same events.
 
 ## Access guarantee
 

@@ -79,6 +79,12 @@ counter:
     name: "Fridge openings total"
     icon: mdi:counter
     restore: true
+  fridge_short_grabs_total:
+    # sub-floor openings booked by the OPTIONAL humidity companion blueprint
+    # (fridge_humidity_monitor); stays at 0 without it
+    name: "Fridge short grabs total"
+    icon: mdi:counter
+    restore: true
 
 # Mirror sensors: expose helper values as proper sensors so that recorder LTS,
 # the statistics platform and utility_meter can consume them.
@@ -107,6 +113,12 @@ template:
         icon: mdi:counter
         availability: "{{ has_value('counter.fridge_openings_total') }}"
         state: "{{ states('counter.fridge_openings_total') | int(0) }}"
+      - name: "Fridge short grabs"
+        unique_id: fridge_short_grabs
+        state_class: total_increasing
+        icon: mdi:water-percent
+        availability: "{{ has_value('counter.fridge_short_grabs_total') }}"
+        state: "{{ states('counter.fridge_short_grabs_total') | int(0) }}"
       - name: "Fridge door open time total"
         unique_id: fridge_door_open_time_total
         unit_of_measurement: "s"
@@ -223,3 +235,7 @@ utility_meter:
     name: "Fridge open time month"
     source: sensor.fridge_door_open_time_total
     cycle: monthly
+  fridge_short_grabs_daily:
+    name: "Fridge short grabs today"
+    source: sensor.fridge_short_grabs
+    cycle: daily

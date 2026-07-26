@@ -215,6 +215,28 @@ invisibly.
 It needs no package helpers — it is self-contained. Inputs and events:
 [reference.md](reference.md#sensor-silence-watchdog).
 
+## Humidity short-grab channel (optional)
+
+If your in-fridge sensor also reports humidity (combined devices like the Aqara class do),
+the `fridge_humidity_monitor.yaml` companion blueprint counts openings BELOW the temperature
+detection floor — brief grabs that leave zero trace on the temperature channel but spike
+relative humidity within a single report. `deploy.sh` ships the blueprint; the package
+(v0.4.0+) carries its helpers (`counter.fridge_short_grabs_total` and the mirror/daily-meter
+sensors), so upgrading an older install means redeploying the package and restarting.
+
+1. Create an automation from **Fridge Humidity Grab Monitor (fridge-stats)**, select the
+   in-fridge humidity sensor, and leave the state-helper inputs at their defaults (example
+   instance: `examples/automations.yaml`).
+2. The thresholds are per-appliance like everything else: check your sensor's per-report
+   humidity rates before trusting the defaults (door events on the reference appliances:
+   ≥ +0.29 %RH/s and +7 to +33 %RH per report; evaporator moisture cycling: ≈ +0.05 %RH/s).
+3. Acceptance test: open the door for ~5 seconds. Within `claim_wait_minutes` the logbook of
+   the door-state helper shows a "Short grab booked" entry and the short-grab counter
+   increments — while a compressor cycle never books one (reference backtest: 11 days, zero
+   bookings at night).
+
+Behaviour, thresholds, and the event payload: [reference.md](reference.md#humidity-grab-monitor).
+
 ## Monitor a second appliance (freezer)
 
 The blueprint is per-appliance; the package's helpers are one appliance's state. Do NOT

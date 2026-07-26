@@ -3,6 +3,43 @@
 All notable changes to this project are documented in this file. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.0] - 2026-07-26
+
+### Added
+
+- `blueprints/fridge_humidity_monitor.yaml` (+ `.de` variant): optional companion blueprint
+  that books openings BELOW the temperature detection floor (`short_grab` class) from an
+  in-fridge humidity sensor. Room air carries far more absolute moisture than the dried
+  fridge air, so a stopwatched 5 s grab that produced zero temperature report deltas spiked
+  humidity +12 %RH within one report. Detection gates on per-report rate plus single-step
+  amplitude (defaults 0.2 %RH/s and 4 %RH; the slowest stopwatched door event measured
+  +0.29 %RH/s, the evaporator's moisture cycle ≈ +0.05 %RH/s); a claim window (default
+  5 min) hands real, longer openings to the temperature channel — reference claims arrived
+  within 71 s. Runs `mode: single` + `max_exceeded: silent` so the aftershock reports of the
+  same grab fold into the episode instead of booking again. Fires `fridge_short_grab` with
+  rate/amplitude payload, increments its own counter, writes the logbook.
+- Package (both language variants): `counter.fridge_short_grabs_total`, mirror
+  `sensor.fridge_short_grabs` (`total_increasing`), daily meter `fridge_short_grabs_today`.
+  `make_package.py` maps `counter_short_grabs` in the printed blueprint-input mapping and
+  validates the new entities like the rest (27 → 30 entities).
+- Validation on the reference kitchen (11 days of recorder history, full-rule backtest incl.
+  claim window): 4.0 booked grabs/day on top of 3.3 temperature-detected openings/day —
+  consistent with the documented undercount of brief openings — and ZERO bookings between
+  01:00 and 05:00 (the compressor's humidity cycle never triggered). Both stopwatched
+  ground-truth events on the second appliance rank as its top-2 per-report rates and are the
+  only threshold passers in 33 h.
+- Pressure-confounder check (same 11 days, in-fridge barometer vs a room barometer):
+  weather-scale pressure is uncorrelated with in-fridge humidity rates (r ≈ −0.03), so the
+  humidity detector needs no pressure compensation. The humidity–pressure co-movement that
+  does exist lives entirely in the internal pressure component (fridge minus room, r ≈ +0.6
+  on 30 min–12 h differences) and is consistent with vapor-pressure transience in the leaky
+  cavity — a co-symptom of the same events, not a false-trigger source.
+
+### Changed
+
+- `deploy.sh` ships the humidity blueprint alongside the other two; docs
+  (README/reference/installation) and examples cover the humidity channel.
+
 ## [0.3.0] - 2026-07-25
 
 ### Added
