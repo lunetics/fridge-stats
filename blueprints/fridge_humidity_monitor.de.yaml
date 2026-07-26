@@ -58,7 +58,14 @@ blueprint:
             entity:
               domain: input_boolean
         helper_last_class:
-          name: Letzte-Ereignisklasse-Helfer
+          name: Letzte-Ereignisklasse-Helfer (wird beim Buchen beschrieben)
+          description: >
+            Dieses Blueprint SCHREIBT `short_grab` hinein — es teilt sich den
+            Helfer mit dem Tür-Monitor (der einzige Doppel-Schreiber im Satz).
+            Beim Zweitgerät auf dessen eigenen Helfer zeigen, nie auf einen
+            geteilten. Die begleitenden Dauer-/Öffnungszeit-Helfer werden NICHT
+            angefasst: Nach einer Kurzöffnung zeigen sie weiterhin das letzte
+            Temperaturkanal-Ereignis.
           default: input_text.fridge_last_event_class
           selector:
             entity:
@@ -116,11 +123,13 @@ blueprint:
           selector:
             number: {min: 2, max: 60, step: 1, unit_of_measurement: min}
 
-# mode single + silent: Die Nachbeben-Reports DERSELBEN Kurzöffnung (ein
-# kleinerer +1–2-%RH-Schritt folgt meist binnen Sekunden) treffen ein, während
-# der erste Lauf noch im Claim-Fenster steht — sie müssen in diese Episode
-# einfließen, nicht als eigene Läufe dahinter anstehen (queued würde pro
-# Nachbeben eine Kurzöffnung buchen).
+# mode single + silent: Folge-Reports DERSELBEN Kurzöffnung, die das
+# Amplituden-Gatter selbst reißen (die feuchte Luft mischt noch eine Minute
+# nach), treffen ein, während der erste Lauf noch im Claim-Fenster steht — sie
+# müssen in diese Episode einfließen, nicht als eigene Läufe dahinter anstehen
+# (queued würde pro qualifizierendem Folge-Report eine Kurzöffnung buchen).
+# Bewusster Preis: Auch echte Wiederholungs-Griffe im Claim-Fenster
+# verschmelzen zu einer Buchung — siehe die claim_wait_minutes-Beschreibung.
 mode: single
 max_exceeded: silent
 
@@ -130,8 +139,15 @@ variables:
   grab_rate_min: !input grab_rate_min
   grab_amp_min: !input grab_amp_min
   max_report_gap: !input max_report_gap
+  # `trigger is defined`/`is defined`-Wächter: Ein manueller Run (UI) bzw.
+  # automation.trigger hat keinen State-Trigger — from_ok muss dort false
+  # rendern, damit die Conditions den Lauf ablehnen statt beim Rendern der
+  # Variablen zu crashen (die Geschwister-Blueprints laufen bei manuellen
+  # Runs ebenfalls leer durch).
   from_ok: >-
-    {{ trigger.from_state is not none
+    {{ trigger is defined
+       and trigger.from_state is defined
+       and trigger.from_state is not none
        and trigger.from_state.state not in ['unavailable', 'unknown']
        and trigger.to_state.state not in ['unavailable', 'unknown'] }}
   d_rh: >-
@@ -151,6 +167,15 @@ triggers:
 
 conditions:
   - "{{ from_ok }}"
+  # Restart-Wächter: Nach einem Home-Assistant-Neustart springt last_reported
+  # JEDER Entity auf die Startzeit (siehe fridge_sensor_watchdog.yaml zur
+  # selben Kante) — das ERSTE Paar nach dem Neustart kann daher den Anstieg
+  # eines vollen Report-Intervalls mit einer Fast-Null-Lücke paaren und eine
+  # tür-artige Rate vortäuschen. Läufe unterdrücken, bis die Automation länger
+  # als eine Report-Lücke oben ist; `this` ist das State-Objekt der Automation,
+  # sein last_changed wird beim Start gesetzt (und beim Reload — gleichermaßen
+  # konservativ).
+  - "{{ (now() - this.last_changed).total_seconds() > max_report_gap | float(180) }}"
   # solange der Türzustand an ist, gehört jede Feuchtebewegung dieser Öffnung
   - condition: state
     entity_id: !input helper_door_open
