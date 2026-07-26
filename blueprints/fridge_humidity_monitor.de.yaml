@@ -172,10 +172,14 @@ conditions:
   # selben Kante) — das ERSTE Paar nach dem Neustart kann daher den Anstieg
   # eines vollen Report-Intervalls mit einer Fast-Null-Lücke paaren und eine
   # tür-artige Rate vortäuschen. Läufe unterdrücken, bis die Automation länger
-  # als eine Report-Lücke oben ist; `this` ist das State-Objekt der Automation,
-  # sein last_changed wird beim Start gesetzt (und beim Reload — gleichermaßen
-  # konservativ).
-  - "{{ (now() - this.last_changed).total_seconds() > max_report_gap | float(180) }}"
+  # als eine Report-Lücke oben ist; `this` ist der State der Automation, beim
+  # Start gesetzt (und beim Reload — gleichermaßen konservativ). MUSS über
+  # as_timestamp laufen: `this` entsteht aus State.as_dict(), this.last_changed
+  # ist hier also ein ISO-STRING — eine direkte datetime-Subtraktion wirft bei
+  # jeder Auswertung einen TemplateError und würde die Erkennung komplett
+  # töten. Der Default 0 fällt OFFEN aus (Wächter passiert), statt den Detektor
+  # bei einem unparsbaren Wert stummzuschalten.
+  - "{{ as_timestamp(now()) - as_timestamp(this.last_changed, 0) > max_report_gap | float(180) }}"
   # solange der Türzustand an ist, gehört jede Feuchtebewegung dieser Öffnung
   - condition: state
     entity_id: !input helper_door_open

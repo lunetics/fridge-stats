@@ -75,8 +75,11 @@ def main():
     hum_rows = [(parse_ts(p["last_changed"]), float(p["state"]))
                 for p in fetch_history(args.url, args.token, args.humidity, start, end)
                 if p["state"] not in ("unknown", "unavailable", "")]
+    # door: keep real on/off transitions only — an unavailable/unknown row would
+    # otherwise act as a phantom door state in door_state_at()/next_door_on()
     door_rows = [(parse_ts(p["last_changed"]), p["state"])
-                 for p in fetch_history(args.url, args.token, args.door, start, end)]
+                 for p in fetch_history(args.url, args.token, args.door, start, end)
+                 if p["state"] in ("on", "off")]
     if len(hum_rows) < 2:
         sys.exit("not enough humidity history")
     hum_rows.sort()
@@ -122,6 +125,9 @@ def main():
             busy_until = t + claim
 
     days = (hum_rows[-1][0] - hum_rows[0][0]).total_seconds() / 86400
+    if ZoneInfo is None:
+        print(f"WARNING: zoneinfo unavailable (Python < 3.9) — hour histogram and the "
+              f"night-window count use UTC, not {args.tz}", file=sys.stderr)
     tz = ZoneInfo(args.tz) if ZoneInfo else datetime.timezone.utc
     hours = Counter(t.astimezone(tz).hour for t, _ in booked)
     night = sum(hours[h] for h in (1, 2, 3, 4))

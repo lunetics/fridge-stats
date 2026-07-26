@@ -14,9 +14,15 @@ Fixes from the retroactive internal review of v0.4.0 (findings internal-1…7; 2
   every entity's `last_reported` resets to startup time, so the first report pair after a
   restart could pair a full report interval's humidity rise with a near-zero gap, defeat
   the rate gate and book a phantom short grab (internal-1). Runs are now suppressed until
-  the automation has been up longer than `max_report_gap`. **Manual-run hardening** — a UI
-  "Run" / `automation.trigger` no longer errors while rendering variables; `from_ok`
-  tolerates a missing state trigger like the sibling blueprints do (internal-3).
+  the automation has been up longer than `max_report_gap`. The guard computes via
+  `as_timestamp()` on purpose: `this` is built from `State.as_dict()`, so
+  `this.last_changed` is an ISO string in automation templates — the first-cut direct
+  datetime subtraction raised a TemplateError on every evaluation and would have killed
+  detection entirely; caught by the fix-loop delta review (delta-breadth-1) before merge
+  and verified against Home Assistant core source plus the live template engine.
+  **Manual-run hardening** — a UI "Run" / `automation.trigger` no longer errors while
+  rendering variables; `from_ok` tolerates a missing state trigger like the sibling
+  blueprints do (internal-3).
 - Evidence honesty (internal-2): the v0.4.0 validation is now labeled as what it is — a
   `last_changed`-based recorder approximation of the shipped `last_reported` rule, one-sided
   (live sensitivity ≥ backtest; booked counts are lower bounds; the night-zero result was
