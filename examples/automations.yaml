@@ -1,0 +1,90 @@
+# Example automation instances for fridge-stats (door monitor + sensor watchdog).
+# Blueprints are usually instantiated via the UI (Settings -> Automations & scenes ->
+# Create automation -> start from a blueprint); these are the equivalent YAML instances
+# for automations.yaml, and double as a reference for which inputs a full setup wires up.
+# Placeholders to replace: sensor.fridge_temperature (your in-fridge sensor),
+# sensor.room_temperature (ambient reference), notify.mobile_app_your_phone.
+# State-helper inputs are omitted for the stock package on purpose - the blueprint
+# defaults already point at its fridge_* helpers (identical in both language variants).
+
+- id: fridge_door_monitor
+  alias: "Fridge: door monitor (fridge-stats)"
+  use_blueprint:
+    path: fridge_stats/fridge_door_monitor.yaml
+    input:
+      fridge_temp_sensor: sensor.fridge_temperature
+      ambient_temp_sensor: sensor.room_temperature
+      # rise_rate_min / ajar_warn_temp / critical_temp: calibrate per appliance
+      # (docs/installation.md) - the defaults are one measured fridge, not constants.
+      warn_actions:
+        - action: notify.mobile_app_your_phone
+          data:
+            title: "Fridge door open?"
+            message: >-
+              The fridge door seems to have been open/ajar for 15+ minutes
+              (temperature still rising).
+      critical_actions:
+        - action: notify.mobile_app_your_phone
+          data:
+            title: "Fridge too warm!"
+            message: >-
+              Interior above the critical temperature for 30 min - door left
+              open or appliance fault.
+
+- id: fridge_sensor_watchdog
+  alias: "Fridge: sensor watchdog (fridge-stats)"
+  use_blueprint:
+    path: fridge_stats/fridge_sensor_watchdog.yaml
+    input:
+      monitored_sensor: sensor.fridge_temperature
+      silence_hours: 3
+      alarm_actions:
+        - action: notify.mobile_app_your_phone
+          data:
+            title: "Fridge sensor silent"
+            message: >-
+              The fridge temperature sensor has not reported for over 3 h -
+              battery (cold drains it faster) or Zigbee link. Door detection
+              is paused until it returns.
+      recovery_actions:
+        - action: notify.mobile_app_your_phone
+          data:
+            title: "Fridge sensor back"
+            message: >-
+              The fridge temperature sensor is reporting again. Door detection
+              resumed.
+
+# --- Second appliance (generated package, e.g. make_package.py --prefix freezer) ---
+# The door monitor must point EVERY state-helper input at the generated helper set;
+# deploy.sh --prefix / make_package.py print exactly this mapping. The watchdog holds
+# no state - only the monitored sensor changes.
+
+- id: freezer_door_monitor
+  alias: "Freezer: door monitor (fridge-stats)"
+  use_blueprint:
+    path: fridge_stats/fridge_door_monitor.yaml
+    input:
+      fridge_temp_sensor: sensor.freezer_temperature
+      ambient_temp_sensor: sensor.room_temperature
+      helper_door_open: input_boolean.freezer_door_open
+      helper_t0: input_number.freezer_t0
+      helper_troom0: input_number.freezer_troom0
+      helper_peak: input_number.freezer_peak
+      helper_tau: input_number.freezer_tau
+      helper_opened_at: input_datetime.freezer_opened_at
+      helper_last_duration: input_number.freezer_last_open_duration
+      helper_last_class: input_text.freezer_last_event_class
+      counter_openings: counter.freezer_openings_total
+      helper_open_seconds_total: input_number.freezer_open_seconds_total
+      # Thresholds are per-appliance: a freezer's cycle ceiling sits far below a
+      # fridge's - read yours off analysis/plot_diagnostics.py before trusting alerts.
+      # warn_actions / critical_actions: same pattern as the fridge instance above.
+
+- id: freezer_sensor_watchdog
+  alias: "Freezer: sensor watchdog (fridge-stats)"
+  use_blueprint:
+    path: fridge_stats/fridge_sensor_watchdog.yaml
+    input:
+      monitored_sensor: sensor.freezer_temperature
+      silence_hours: 3
+      # alarm_actions / recovery_actions: same pattern as the fridge instance above.

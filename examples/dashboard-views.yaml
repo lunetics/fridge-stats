@@ -6,6 +6,8 @@
 # the English view uses the sensor.fridge_* ids from package/fridge_stats.yaml. Use the view
 # that matches the package variant you deployed. The input_boolean/input_number/input_text
 # helper ids (fridge_*) are identical in both packages.
+# Second appliance (make_package.py --prefix <p>): copy a view and swap every entity id
+# to the generated <p>_* set (the generator prints the id families it created).
 views:
 - title: Kühlschrank
   path: kuehlschrank
@@ -26,6 +28,7 @@ views:
       name: Letzte Öffnungsdauer
     - input_number.fridge_tau
     - automation.kuhlschrank_tur_monitor_fridge_stats
+    - automation.kuhlschrank_sensor_watchdog_fridge_stats
   - type: entities
     title: Statistik
     entities:
@@ -90,6 +93,8 @@ views:
       name: Tau (calibration constant)
     - entity: automation.fridge_door_monitor
       name: Door monitor automation
+    - entity: automation.fridge_sensor_watchdog
+      name: Sensor watchdog automation
   - type: entities
     title: Statistics
     entities:

@@ -70,7 +70,8 @@ Three places take sensor entities — only the first one affects detection:
    **Fridge Door Monitor (temperature-physics based)**. Select your fridge and ambient
    temperature sensors. Leave the state-helper inputs at their defaults (they point at the
    package's entities). Configure `warn_actions` and `critical_actions` with your
-   notification services.
+   notification services. (Ready-to-paste YAML instances of this and the watchdog
+   automation: `examples/automations.yaml`.)
 
 6. Seed τ: set `input_number.fridge_tau` to `1028` as a starting value, then calibrate
    (below).
@@ -208,7 +209,8 @@ invisibly.
    `<config>/blueprints/automation/fridge_stats/`.
 2. Create an automation from **Sensor Silence Watchdog (fridge-stats)**, select your fridge
    sensor as the monitored sensor, set `silence_hours` (default 3), and configure
-   `alarm_actions` (and optionally `recovery_actions`) with your notification services.
+   `alarm_actions` (and optionally `recovery_actions`) with your notification services
+   (example instance: `examples/automations.yaml`).
 
 It needs no package helpers — it is self-contained. Inputs and events:
 [reference.md](reference.md#sensor-silence-watchdog).
@@ -234,7 +236,8 @@ the result (every internal reference must resolve, every entity must carry the n
    check, then restart (packages load at startup).
 2. Create a second automation from the same blueprint, select the freezer's sensors, and
    point every state-helper input at the `freezer_*` entities — the exact mapping is in the
-   generator's output.
+   generator's output (fully mapped YAML pair, door monitor + watchdog:
+   `examples/automations.yaml`).
 3. Calibrate the new appliance separately — τ, `rise_rate_min` and `ajar_warn_temp` are
    per-appliance values, not constants (`analysis/calibrate_tau.py`, `--rate-check`,
    `analysis/plot_diagnostics.py`). Do not copy the reference fridge's 1028 s.
