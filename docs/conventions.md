@@ -60,3 +60,12 @@ explanation?* If the claim and its rivals predict the same data, the data suppor
 them. Name the factors the sample held constant (brand, sensor model, placement, household)
 as open confounders instead of silently generalizing over them, and phrase small-n results
 as what they are: existence proofs, not distributions.
+
+## Git workflow: main is PR-only
+
+`main` is branch-protected (enforced for admins too, since 2026-07-26): every change —
+features and docs alike — lands via a branch and a pull request; direct pushes are rejected
+by GitHub. Behaviour-carrying PRs get a review pass before merge (the v0.2.0 and v0.3.0
+feature PRs are the pattern); trivial docs-only PRs may merge without one. Releases are
+tagged from `main` after the merge. Background: v0.4.0 was pushed directly and reviewed only
+retroactively — the protection turns the convention back into a guarantee.

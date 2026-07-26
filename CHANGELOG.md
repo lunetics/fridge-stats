@@ -3,6 +3,40 @@
 All notable changes to this project are documented in this file. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.1] - 2026-07-26
+
+Fixes from the retroactive internal review of v0.4.0 (findings internal-1…7; 2 MEDIUM,
+5 LOW, no CRITICAL/HIGH).
+
+### Fixed
+
+- Humidity monitor (both variants): **restart guard** — after a Home Assistant restart
+  every entity's `last_reported` resets to startup time, so the first report pair after a
+  restart could pair a full report interval's humidity rise with a near-zero gap, defeat
+  the rate gate and book a phantom short grab (internal-1). Runs are now suppressed until
+  the automation has been up longer than `max_report_gap`. **Manual-run hardening** — a UI
+  "Run" / `automation.trigger` no longer errors while rendering variables; `from_ok`
+  tolerates a missing state trigger like the sibling blueprints do (internal-3).
+- Evidence honesty (internal-2): the v0.4.0 validation is now labeled as what it is — a
+  `last_changed`-based recorder approximation of the shipped `last_reported` rule, one-sided
+  (live sensitivity ≥ backtest; booked counts are lower bounds; the night-zero result was
+  measured on the approximation) — in CHANGELOG/README/reference, and the backtest is
+  committed as `analysis/backtest_short_grab.py` so the numbers are reproducible.
+- `short_grab` class documentation states that the duration/opened-at helpers keep showing
+  the last temperature-channel event (internal-4), and the `helper_last_class` input says
+  plainly that this blueprint writes it. Acceptance test corrected: the booking appears
+  AFTER the claim window elapses, not within it (internal-5). The `mode: single` rationale
+  now names the real folding target — follow-on reports that clear the amplitude gate —
+  and its deliberate cost (internal-6).
+- Package comments no longer carry a `fridge_`-prefixed blueprint-file token, which the
+  generator's slug rewrite turned into a non-existent per-appliance blueprint name inside
+  generated second-appliance packages (internal-7).
+
+### Added
+
+- docs/conventions.md: git-workflow section — `main` is PR-only (branch protection incl.
+  admins); behaviour-carrying PRs get a review pass before merge.
+
 ## [0.4.0] - 2026-07-26
 
 ### Added
@@ -22,12 +56,13 @@ All notable changes to this project are documented in this file. The format foll
   `sensor.fridge_short_grabs` (`total_increasing`), daily meter `fridge_short_grabs_today`.
   `make_package.py` maps `counter_short_grabs` in the printed blueprint-input mapping and
   validates the new entities like the rest (27 → 30 entities).
-- Validation on the reference kitchen (11 days of recorder history, full-rule backtest incl.
-  claim window): 4.0 booked grabs/day on top of 3.3 temperature-detected openings/day —
-  consistent with the documented undercount of brief openings — and ZERO bookings between
-  01:00 and 05:00 (the compressor's humidity cycle never triggered). Both stopwatched
-  ground-truth events on the second appliance rank as its top-2 per-report rates and are the
-  only threshold passers in 33 h.
+- Validation on the reference kitchen (11 days of recorder history, rule backtest incl.
+  claim window — a `last_changed`-based approximation of the shipped rule, since recorder
+  history carries no `last_reported`; precised in 0.4.1): 4.0 booked grabs/day on top of
+  3.3 temperature-detected openings/day — consistent with the documented undercount of
+  brief openings — and ZERO bookings between 01:00 and 05:00 (the compressor's humidity
+  cycle never triggered). Both stopwatched ground-truth events on the second appliance rank
+  as its top-2 per-report rates and are the only threshold passers in 33 h.
 - Pressure-confounder check (same 11 days, in-fridge barometer vs a room barometer):
   weather-scale pressure is uncorrelated with in-fridge humidity rates (r ≈ −0.03), so the
   humidity detector needs no pressure compensation. The humidity–pressure co-movement that

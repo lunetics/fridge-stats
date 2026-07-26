@@ -81,7 +81,9 @@ counter:
     restore: true
   fridge_short_grabs_total:
     # sub-floor openings booked by the OPTIONAL humidity companion blueprint
-    # (fridge_humidity_monitor); stays at 0 without it
+    # (shared, see blueprints/); stays at 0 without it. Do not name the
+    # blueprint file here: the generator rewrites every fridge_-prefixed token
+    # in generated copies, comments included.
     name: "Fridge short grabs total"
     icon: mdi:counter
     restore: true
