@@ -23,6 +23,10 @@ Fixes from the retroactive internal review of v0.4.0 (findings internal-1…7; 2
   **Manual-run hardening** — a UI "Run" / `automation.trigger` no longer errors while
   rendering variables; `from_ok` tolerates a missing state trigger like the sibling
   blueprints do (internal-3).
+- `analysis/backtest_short_grab.py` hardening from the same delta pass: door-state rows
+  are filtered to real on/off transitions (a lingering `unavailable` row acted as a
+  phantom door state), and a missing `zoneinfo` (Python < 3.9) now warns loudly on stderr
+  instead of silently reporting UTC night windows.
 - Evidence honesty (internal-2): the v0.4.0 validation is now labeled as what it is — a
   `last_changed`-based recorder approximation of the shipped `last_reported` rule, one-sided
   (live sensitivity ≥ backtest; booked counts are lower bounds; the night-zero result was
