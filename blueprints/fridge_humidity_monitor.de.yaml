@@ -123,13 +123,13 @@ blueprint:
           selector:
             number: {min: 2, max: 60, step: 1, unit_of_measurement: min}
 
-# mode single + silent: Folge-Reports DERSELBEN Kurzöffnung, die das
-# Amplituden-Gatter selbst reißen (die feuchte Luft mischt noch eine Minute
-# nach), treffen ein, während der erste Lauf noch im Claim-Fenster steht — sie
-# müssen in diese Episode einfließen, nicht als eigene Läufe dahinter anstehen
-# (queued würde pro qualifizierendem Folge-Report eine Kurzöffnung buchen).
-# Bewusster Preis: Auch echte Wiederholungs-Griffe im Claim-Fenster
-# verschmelzen zu einer Buchung — siehe die claim_wait_minutes-Beschreibung.
+# mode single + silent: follow-on reports of the SAME grab that clear the
+# amplitude gate on their own (the humid air keeps mixing for a minute) arrive
+# while the first run is still inside its claim window — they must fold into
+# that episode, not queue behind it as separate runs (queued would book one
+# grab per qualifying follow-on report). The deliberate cost: genuine repeat
+# grabs within the claim window collapse into one booking too — see the
+# claim_wait_minutes description.
 mode: single
 max_exceeded: silent
 
@@ -139,11 +139,10 @@ variables:
   grab_rate_min: !input grab_rate_min
   grab_amp_min: !input grab_amp_min
   max_report_gap: !input max_report_gap
-  # `trigger is defined`/`is defined`-Wächter: Ein manueller Run (UI) bzw.
-  # automation.trigger hat keinen State-Trigger — from_ok muss dort false
-  # rendern, damit die Conditions den Lauf ablehnen statt beim Rendern der
-  # Variablen zu crashen (die Geschwister-Blueprints laufen bei manuellen
-  # Runs ebenfalls leer durch).
+  # `trigger is defined`/`is defined` guards: a manual Run (UI) or
+  # automation.trigger has no state trigger — from_ok must render false there
+  # so the conditions reject the run instead of erroring while rendering
+  # variables (the sibling blueprints no-op on manual runs too).
   from_ok: >-
     {{ trigger is defined
        and trigger.from_state is defined
@@ -153,9 +152,9 @@ variables:
   d_rh: >-
     {{ (trigger.to_state.state | float(0)) - (trigger.from_state.state | float(0))
        if from_ok else 0 }}
-  # last_reported, nicht last_changed: Die Ratenbasis ist die Zeit seit dem
-  # VORIGEN REPORT — ein bloß wiederholter Wert darf das Fenster nicht strecken
-  # und einen echten Sprung unter die Raten-Schwelle verdünnen.
+  # last_reported, not last_changed: the rate base is the time since the
+  # PREVIOUS REPORT — a value that merely repeated earlier must not stretch
+  # the window and dilute a real jump into a sub-threshold rate.
   gap_s: >-
     {{ (trigger.to_state.last_reported - trigger.from_state.last_reported).total_seconds()
        if from_ok else 0 }}
@@ -167,20 +166,19 @@ triggers:
 
 conditions:
   - "{{ from_ok }}"
-  # Restart-Wächter: Nach einem Home-Assistant-Neustart springt last_reported
-  # JEDER Entity auf die Startzeit (siehe fridge_sensor_watchdog.yaml zur
-  # selben Kante) — das ERSTE Paar nach dem Neustart kann daher den Anstieg
-  # eines vollen Report-Intervalls mit einer Fast-Null-Lücke paaren und eine
-  # tür-artige Rate vortäuschen. Läufe unterdrücken, bis die Automation länger
-  # als eine Report-Lücke oben ist; `this` ist der State der Automation, beim
-  # Start gesetzt (und beim Reload — gleichermaßen konservativ). MUSS über
-  # as_timestamp laufen: `this` entsteht aus State.as_dict(), this.last_changed
-  # ist hier also ein ISO-STRING — eine direkte datetime-Subtraktion wirft bei
-  # jeder Auswertung einen TemplateError und würde die Erkennung komplett
-  # töten. Der Default 0 fällt OFFEN aus (Wächter passiert), statt den Detektor
-  # bei einem unparsbaren Wert stummzuschalten.
+  # Restart guard: after a Home Assistant restart every entity's last_reported
+  # resets to startup time (see fridge_sensor_watchdog.yaml on the same edge),
+  # so the FIRST pair after a restart can pair a full report interval's rise
+  # with a near-zero gap and fake a door-grade rate. Suppress runs until the
+  # automation has been up longer than one report gap; `this` is the
+  # automation's own state, set at startup (and on reload — equally
+  # conservative). MUST go through as_timestamp: `this` is built from
+  # State.as_dict(), so this.last_changed is an ISO STRING here — a direct
+  # datetime subtraction TemplateErrors on every evaluation and would kill
+  # detection entirely. The default 0 fails OPEN (guard passes) rather than
+  # silencing the detector on an unparsable value.
   - "{{ as_timestamp(now()) - as_timestamp(this.last_changed, 0) > max_report_gap | float(180) }}"
-  # solange der Türzustand an ist, gehört jede Feuchtebewegung dieser Öffnung
+  # while the door state is on, every humidity move belongs to that opening
   - condition: state
     entity_id: !input helper_door_open
     state: "off"
@@ -189,12 +187,19 @@ conditions:
   - "{{ rate_rh_s | float(0) >= grab_rate_min | float(0.2) }}"
 
 actions:
-  # Claim-Fenster: Eine echte (längere) Öffnung spikt ZUERST die Feuchte und
-  # bewegt die Temperatur ein bis zwei Reports später — dem Temperaturkanal
-  # Zeit zum Claimen geben, bevor gebucht wird. Auch eine zweite ECHTE Öffnung
-  # im Fenster landet hier und unterdrückt die anstehende Kurzöffnung —
-  # akzeptiert: Sie wird als reguläre Öffnung gebucht, nur die vorangegangene
-  # Kurzöffnung bleibt ungezählt.
+  # A manual Run / automation.trigger SKIPS the top-level conditions
+  # (skip_condition defaults to true) — re-assert the state-trigger gate
+  # before any side effect, otherwise a forced run would sail through the
+  # claim window and book a phantom grab with d_rh = 0.
+  - if:
+      - "{{ not from_ok }}"
+    then:
+      - stop: "no state trigger (manual run) — nothing to evaluate"
+  # Claim window: a real (longer) opening spikes humidity FIRST and moves the
+  # temperature a report or two later — give the temperature channel time to
+  # claim the event before booking. A second REAL opening inside the window
+  # also lands here and suppresses the pending grab — accepted: it books as a
+  # regular opening, only the preceding grab goes uncounted.
   - wait_for_trigger:
       - trigger: state
         entity_id: !input helper_door_open
@@ -205,7 +210,7 @@ actions:
   - if:
       - "{{ wait.trigger is not none }}"
     then:
-      - stop: "Temperaturkanal hat die Öffnung geclaimt — keine Kurzöffnung"
+      - stop: "temperature channel claimed the opening — not a sub-floor grab"
   - action: counter.increment
     target:
       entity_id: !input counter_short_grabs

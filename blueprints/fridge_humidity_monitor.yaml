@@ -185,6 +185,14 @@ conditions:
   - "{{ rate_rh_s | float(0) >= grab_rate_min | float(0.2) }}"
 
 actions:
+  # A manual Run / automation.trigger SKIPS the top-level conditions
+  # (skip_condition defaults to true) — re-assert the state-trigger gate
+  # before any side effect, otherwise a forced run would sail through the
+  # claim window and book a phantom grab with d_rh = 0.
+  - if:
+      - "{{ not from_ok }}"
+    then:
+      - stop: "no state trigger (manual run) — nothing to evaluate"
   # Claim window: a real (longer) opening spikes humidity FIRST and moves the
   # temperature a report or two later — give the temperature channel time to
   # claim the event before booking. A second REAL opening inside the window
