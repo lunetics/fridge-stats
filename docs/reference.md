@@ -217,14 +217,23 @@ only the preceding grab goes uncounted), and a Home Assistant restart during the
 window drops the pending grab. A restart guard additionally suppresses runs during the
 first `max_report_gap` seconds after startup/reload — after a restart every entity's
 `last_reported` resets, and the first report pair could otherwise fake a door-grade rate.
-Validation on the reference kitchen (11 days of recorder history — a `last_changed`-based
-approximation of the shipped rule, see the caveat below): 4.0 booked grabs/day on top of
-3.3 temperature-detected openings/day, zero bookings between 01:00 and 05:00 — the
-compressor's humidity cycle never triggered. Caveat: recorder history carries no
-`last_reported`, so the backtest measured state-CHANGE gaps; the live rule's
-`last_reported` gaps are ≤ those, making live sensitivity ≥ the backtest's — the daily
-count is a lower bound, and the night-zero result was measured on the approximation, not
-the shipped rule (`analysis/backtest_short_grab.py` reproduces it). Barometric pressure is not a confounder: room-barometer
+Validation on the reference kitchen (recorder history — a `last_changed`-based
+approximation of the shipped rule, see the caveats below): ≈2 booked grabs/day on top of
+3.3 temperature-detected openings/day (6-day window in which the door-state helper
+actually existed; the 4.0/day published with 0.4.0 included five earlier days where no
+temperature channel existed to claim real openings — corrected in 0.4.1), zero bookings
+between 01:00 and 05:00 — the window with compressor cycles but no people; the backtest
+classifies by hour, not by cause, so this is measured night-quiet, not proof that a
+compressor cycle can never book. Caveats:
+recorder history carries no `last_reported`, so the backtest measured state-CHANGE gaps;
+the live rule's `last_reported` gaps are ≤ those, making live CANDIDATE sensitivity ≥ the
+backtest's in steady state — but the restart guard (which the backtest does not model)
+suppresses live runs for up to `max_report_gap` after startup/reload, and `mode: single`
+episode folding can merge live bookings differently, so the daily count is an
+approximation from below outside restart windows, not an unconditional lower bound.
+`analysis/backtest_short_grab.py` reproduces the METHOD against any instance and window;
+the published numbers came from the reference kitchen's rolling recorder window at
+release time. Barometric pressure is not a confounder: room-barometer
 changes showed zero correlation with in-fridge humidity rates (r ≈ −0.03 over the same
 11 days); the in-fridge humidity–pressure co-movement that does exist is internal
 vapor-pressure transience, a co-symptom of the same events.

@@ -59,9 +59,11 @@ the full setup is still two files — see [Install](#install).
   temperature trace but spiked humidity +12 %RH in one report; the evaporator's moisture cycle
   moves as far but far slower, so the detector gates on rate + amplitude and books `short_grab`
   only when the temperature channel does not claim the event. Reference backtest (11 days,
-  recorder-based `last_changed` approximation of the rule — live sensitivity is ≥ that, see
-  [reference](docs/reference.md#humidity-grab-monitor)): 4.0 grabs/day on top of the
-  temperature-detected openings, zero compressor false-bookings.
+  recorder-based `last_changed` approximation of the rule — live candidate sensitivity is
+  ≥ that in steady state, see the caveats in
+  [reference](docs/reference.md#humidity-grab-monitor)): ≈2 grabs/day on top of the
+  temperature-detected openings, and zero bookings between 01:00 and 05:00 — the window
+  with compressor cycles but no people (the backtest classifies by hour, not by cause).
 - **Fully configurable blueprint** (typed selectors): fridge sensor, ambient sensor, optional
   auxiliary door/motion/vibration sensor for future sensor fusion, all thresholds, alarm
   actions. Instantiate per appliance — `make_package.py --prefix freezer` generates the second

@@ -1,15 +1,26 @@
 #!/usr/bin/env python3
 """Backtest the humidity short-grab rule against recorder history.
 
-LIMITATION — read this before trusting any number: recorder history exposes
-``last_changed`` only, while the shipped blueprint computes its rate over
-``last_reported`` gaps. For any report pair, the ``last_reported`` gap is <=
-the state-change gap this script measures, so the live rule computes rates
->= the backtested ones and admits pairs this script rejects at the gap gate.
-Results are therefore LOWER BOUNDS on live booking volume, and a night-quiet
-result here is evidence about the approximation, not a guarantee for the
-shipped rule. (The v0.4.0 release numbers came from this logic; see
-docs/reference.md "Humidity grab monitor".)
+LIMITATIONS — read this before trusting any number:
+
+1. Recorder history exposes ``last_changed`` only, while the shipped blueprint
+   computes its rate over ``last_reported`` gaps. For any report pair, the
+   ``last_reported`` gap is <= the state-change gap this script measures, so
+   the live rule computes rates >= the backtested ones and admits pairs this
+   script rejects at the gap gate. That inequality holds at the CANDIDATE-GATE
+   level: booked counts here approximate live volume from below in steady
+   state, but are not an unconditional guarantee.
+2. The replay does not model the blueprint's restart/reload guard (live runs
+   are suppressed for ``max_report_gap`` after automation startup/reload), so
+   around restarts the live system can book FEWER events than this replay.
+3. ``mode: single`` episode folding depends on which candidates exist: live-only
+   candidates can open claim windows that fold candidates this replay books.
+4. A night-quiet result is evidence about the approximation over the sampled
+   window, not proof that a specific physical source (e.g. the compressor
+   cycle) can never book.
+
+(The v0.4.0 release numbers came from this logic; see docs/reference.md
+"Humidity grab monitor".)
 
 Replays the full rule otherwise: amplitude + rate + report-gap gates, the
 door-state exclusion, the temperature-channel claim window, and the
@@ -25,6 +36,7 @@ import argparse
 import bisect
 import datetime
 import json
+import os
 import sys
 import urllib.parse
 import urllib.request
@@ -57,8 +69,10 @@ def parse_ts(value):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--url", required=True)
-    ap.add_argument("--token", required=True)
+    ap.add_argument("--url", default=os.environ.get("HA_URL"),
+                    help="HA base URL (or env HA_URL)")
+    ap.add_argument("--token", default=os.environ.get("HA_TOKEN"),
+                    help="long-lived token (or env HA_TOKEN — keeps it out of argv)")
     ap.add_argument("--humidity", required=True, help="in-fridge humidity sensor entity")
     ap.add_argument("--door", required=True, help="door-state input_boolean written by the door monitor")
     ap.add_argument("--days", type=float, default=11)
@@ -68,18 +82,24 @@ def main():
     ap.add_argument("--claim-minutes", type=float, default=5.0, help="blueprint claim_wait_minutes")
     ap.add_argument("--tz", default="Europe/Berlin", help="timezone for the hour histogram")
     args = ap.parse_args()
+    if not (args.url and args.token):
+        ap.error("need --url and --token (or env HA_URL / HA_TOKEN)")
+    url = args.url.rstrip("/")
+    if ZoneInfo is None and args.tz.upper() != "UTC":
+        sys.exit(f"zoneinfo unavailable (Python < 3.9) — cannot honor --tz {args.tz}; "
+                 f"pass --tz UTC explicitly or run on Python >= 3.9")
 
     end = datetime.datetime.now(datetime.timezone.utc)
     start = end - datetime.timedelta(days=args.days)
 
     hum_rows = [(parse_ts(p["last_changed"]), float(p["state"]))
-                for p in fetch_history(args.url, args.token, args.humidity, start, end)
+                for p in fetch_history(url, args.token, args.humidity, start, end)
                 if p["state"] not in ("unknown", "unavailable", "")]
-    # door: keep real on/off transitions only — an unavailable/unknown row would
-    # otherwise act as a phantom door state in door_state_at()/next_door_on()
+    # door: keep every row — non-on/off states (unavailable/unknown) must act as
+    # "not off" in door_state_at(), exactly like the blueprint's state condition,
+    # not silently inherit the previous real state
     door_rows = [(parse_ts(p["last_changed"]), p["state"])
-                 for p in fetch_history(args.url, args.token, args.door, start, end)
-                 if p["state"] in ("on", "off")]
+                 for p in fetch_history(url, args.token, args.door, start, end)]
     if len(hum_rows) < 2:
         sys.exit("not enough humidity history")
     hum_rows.sort()
@@ -87,8 +107,10 @@ def main():
     door_times = [t for t, _ in door_rows]
 
     def door_state_at(t):
+        # no prior sample -> "unknown": the blueprint proceeds only on an
+        # explicit "off", so an unknown door state must reject, not book
         i = bisect.bisect_right(door_times, t) - 1
-        return door_rows[i][1] if i >= 0 else "off"
+        return door_rows[i][1] if i >= 0 else "unknown"
 
     def next_door_on(t):
         i = bisect.bisect_right(door_times, t)
@@ -108,13 +130,19 @@ def main():
 
     claim = datetime.timedelta(minutes=args.claim_minutes)
     busy_until = None
-    booked, suppressed, rejected_open, folded = [], [], [], []
+    booked, suppressed, rejected_not_off, folded, censored = [], [], [], [], []
     for t, dv in candidates:
         if busy_until is not None and t < busy_until:
             folded.append(t)
             continue
-        if door_state_at(t) == "on":
-            rejected_open.append(t)
+        if door_state_at(t) != "off":
+            rejected_not_off.append(t)
+            continue
+        if t > end - claim:
+            # right-censored: the claim window extends past the queried data —
+            # the door might have claimed it after `end`; excluding keeps the
+            # replay honest instead of inflating the tail of the histogram
+            censored.append(t)
             continue
         on = next_door_on(t)
         if on is not None and on - t <= claim:
@@ -124,25 +152,30 @@ def main():
             booked.append((t, dv))
             busy_until = t + claim
 
-    days = (hum_rows[-1][0] - hum_rows[0][0]).total_seconds() / 86400
-    if ZoneInfo is None:
-        print(f"WARNING: zoneinfo unavailable (Python < 3.9) — hour histogram and the "
-              f"night-window count use UTC, not {args.tz}", file=sys.stderr)
+    observed_days = (hum_rows[-1][0] - hum_rows[0][0]).total_seconds() / 86400
+    if observed_days <= 0:
+        sys.exit("humidity data spans zero time — nothing to rate")
     tz = ZoneInfo(args.tz) if ZoneInfo else datetime.timezone.utc
     hours = Counter(t.astimezone(tz).hour for t, _ in booked)
     night = sum(hours[h] for h in (1, 2, 3, 4))
 
-    print(f"window: {days:.1f} days, {len(hum_rows)} humidity state changes")
+    print(f"window: requested {args.days:.1f} d, observed data span {observed_days:.1f} d, "
+          f"{len(hum_rows)} humidity state changes")
+    if door_rows and door_rows[0][0] > hum_rows[0][0]:
+        print(f"NOTE: door history only starts {door_rows[0][0].isoformat()} — every "
+              f"candidate before that rejects as door-state unknown (the helper did not "
+              f"exist yet); shrink --days to the overlap for a meaningful rate")
     print(f"candidates passing amp/rate/gap gates: {len(candidates)}")
-    print(f"BOOKED short grabs: {len(booked)} ({len(booked) / days:.1f}/day)")
+    print(f"BOOKED short grabs: {len(booked)} ({len(booked) / observed_days:.1f}/observed day)")
     print(f"suppressed by temperature-channel claim: {len(suppressed)}"
           + (f" (delays s: min={min(d for _, d in suppressed):.0f}"
              f" max={max(d for _, d in suppressed):.0f})" if suppressed else ""))
-    print(f"rejected (door already open): {len(rejected_open)}; folded into episodes: {len(folded)}")
+    print(f"rejected (door state not 'off'): {len(rejected_not_off)}; "
+          f"folded into episodes: {len(folded)}; right-censored at window end: {len(censored)}")
     print(f"bookings 01:00-05:00 {args.tz}: {night}")
     print("bookings per hour:", dict(sorted(hours.items())))
-    print("\nREMINDER: last_changed approximation — live rule admits MORE pairs "
-          "(see module docstring).")
+    print("\nREMINDER: last_changed approximation with unmodeled restart-guard and "
+          "folding effects — see LIMITATIONS in the module docstring.")
 
 
 if __name__ == "__main__":
