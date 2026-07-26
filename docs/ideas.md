@@ -207,6 +207,23 @@ to the community is a genuine contribution** (needs a public repo + `source_url`
   test. Kept here as a documented dead-end so it is not re-attempted naively.
   Illustrated in [`img/adaptive_ceiling.png`](img/adaptive_ceiling.png) (the
   "fires anytime during the episode" view, which flatters it).
+- **Temperature-compensated humidity residual ("flatten the humidity sawtooth")**
+  (investigated 2026-07-26, dead end): the idea was to recover short grabs that the
+  humidity monitor's report-gap gate skips (66 % of the reference sensor's
+  state-change gaps exceed 180 s, median 303 s — a grab landing in a quiet phase is
+  diluted across the long window) by predicting the cycle's humidity movement from
+  the temperature channel (ΔRH_expected = k·ΔT over the same window) and gating on
+  the residual with no rate requirement. Back-test on 11 days of reference-kitchen
+  history: the per-report coupling is far too weak to subtract the cycle — night
+  regression gives k ≈ 4.5 %RH/K with r² = 7 % — so a residual-amplitude gate over
+  long windows books 28–40 events/day including 55–82 bookings between 01:00 and
+  05:00 (the shipped rate+amplitude rule: 4.0/day, zero at night). Root cause, same
+  as the adaptive ceiling: the evaporator cycle matches a door event in AMPLITUDE
+  and differs only in RATE, so any level/amplitude baseline scheme re-admits the
+  cycle the moment the rate gate is dropped. The gap-gate sensitivity loss is real
+  but must be addressed differently (measure true report cadence via
+  `last_reported`, or ground truth via `aux_open_sensor`) — never by removing the
+  rate gate.
 - Temperature-based > power-based detection, with sourced counter-evidence: a
   failed compressor still draws power while cooling nothing; a user missed a real
   food-loss event on power-only monitoring —
