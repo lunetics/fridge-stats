@@ -262,3 +262,12 @@ deliberately not spent) — HA Community forum substituted and is the dominant v
 for this use case; EU 5/8 °C figures secondary-sourced; defrost/patent mechanisms
 tool-synthesized, not opened PDFs; #vacation-detection and warm-food-cost-split are
 engineering inferences, not sourced claims.
+- **Door monitor restart edge (pre-existing, flagged in the 0.4.1 review):** the door
+  monitor's open branch divides by a `last_updated` gap clamped only at 1 s
+  (`fridge_door_monitor.yaml:272-274`) — the same restore-timestamp mechanics that
+  produced the humidity monitor's post-restart phantom window (fixed in 0.4.1 with an
+  uptime guard) can shrink that denominator after an HA restart and overstate the rise
+  rate, worst case booking a phantom door-open right after startup. Candidate fix: the
+  humidity monitor's `as_timestamp`-based uptime guard, ported. Never observed live;
+  `rise_amp_min` and the confirmed-fall close bound the damage, which is why this is
+  backlog rather than a hotfix.
