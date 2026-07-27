@@ -77,7 +77,9 @@ Fixes from the retroactive internal review of v0.4.0 (findings internal-1…7; 2
   validates the new entities like the rest (27 → 30 entities).
 - Validation on the reference kitchen (11 days of recorder history, rule backtest incl.
   claim window — a `last_changed`-based approximation of the shipped rule, since recorder
-  history carries no `last_reported`; clarified in 0.4.1): 4.0 booked grabs/day on top of
+  history carries no `last_reported`; SUPERSEDED: corrected to ≈2 grabs/day in 0.4.1,
+  because this window included five pre-deployment days without a temperature channel to
+  claim real openings): 4.0 booked grabs/day on top of
   3.3 temperature-detected openings/day — consistent with the documented undercount of
   brief openings — and ZERO bookings between 01:00 and 05:00, the window with compressor
   cycles but no people (measured by hour, not by cause). Both stopwatched ground-truth

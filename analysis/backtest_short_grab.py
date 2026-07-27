@@ -9,7 +9,9 @@ LIMITATIONS — read this before trusting any number:
    the live rule computes rates >= the backtested ones and admits pairs this
    script rejects at the gap gate. That inequality holds at the CANDIDATE-GATE
    level: booked counts here approximate live volume from below in steady
-   state, but are not an unconditional guarantee.
+   state, but are not an unconditional guarantee. Invalid humidity rows
+   (unknown/unavailable) act as sequence barriers — no pair spans one,
+   matching the blueprint's ``from_ok`` guard.
 2. The replay does not model the blueprint's restart/reload guard (live runs
    are suppressed for ``max_report_gap`` after automation startup/reload), so
    around restarts the live system can book FEWER events than this replay.
@@ -43,9 +45,10 @@ import urllib.request
 from collections import Counter
 
 try:
-    from zoneinfo import ZoneInfo
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 except ImportError:  # Python < 3.9
     ZoneInfo = None
+    ZoneInfoNotFoundError = Exception
 
 
 def fetch_history(url, token, entity_id, start, end):
@@ -92,16 +95,24 @@ def main():
     end = datetime.datetime.now(datetime.timezone.utc)
     start = end - datetime.timedelta(days=args.days)
 
-    hum_rows = [(parse_ts(p["last_changed"]), float(p["state"]))
-                for p in fetch_history(url, args.token, args.humidity, start, end)
-                if p["state"] not in ("unknown", "unavailable", "")]
+    # invalid humidity rows stay in the sequence as None BARRIERS: the blueprint's
+    # from_ok rejects any pair touching unknown/unavailable, so the replay must not
+    # pair numeric samples across a dropout either
+    hum_rows = [(parse_ts(p["last_changed"]),
+                 None if p["state"] in ("unknown", "unavailable", "")
+                 else float(p["state"]))
+                for p in fetch_history(url, args.token, args.humidity, start, end)]
     # door: keep every row — non-on/off states (unavailable/unknown) must act as
     # "not off" in door_state_at(), exactly like the blueprint's state condition,
     # not silently inherit the previous real state
     door_rows = [(parse_ts(p["last_changed"]), p["state"])
                  for p in fetch_history(url, args.token, args.door, start, end)]
-    if len(hum_rows) < 2:
+    valid_rows = [r for r in hum_rows if r[1] is not None]
+    if len(valid_rows) < 2:
         sys.exit("not enough humidity history")
+    if not door_rows:
+        sys.exit("no door history returned — check the --door entity id and the window "
+                 "(an empty door history would silently reject every candidate)")
     hum_rows.sort()
     door_rows.sort()
     door_times = [t for t, _ in door_rows]
@@ -123,6 +134,8 @@ def main():
     # Candidate gates on consecutive state changes (last_changed basis — see header).
     candidates = []
     for (t0, v0), (t1, v1) in zip(hum_rows, hum_rows[1:]):
+        if v0 is None or v1 is None:
+            continue  # dropout barrier — the blueprint's from_ok rejects this pair too
         gap = (t1 - t0).total_seconds()
         dv = v1 - v0
         if dv >= args.amp_min and 0 < gap <= args.max_gap and dv / gap >= args.rate_min:
@@ -138,30 +151,42 @@ def main():
         if door_state_at(t) != "off":
             rejected_not_off.append(t)
             continue
-        if t > end - claim:
-            # right-censored: the claim window extends past the queried data —
-            # the door might have claimed it after `end`; excluding keeps the
-            # replay honest instead of inflating the tail of the histogram
-            censored.append(t)
-            continue
         on = next_door_on(t)
         if on is not None and on - t <= claim:
+            # an OBSERVED claim always wins, even in the window tail — checking
+            # censoring first would misfile these as censored and skew the totals
             suppressed.append((t, (on - t).total_seconds()))
             busy_until = on
-        else:
-            booked.append((t, dv))
-            busy_until = t + claim
+            continue
+        if t > end - claim:
+            # right-censored: the claim window extends past the queried data and
+            # no claim was observed — the door might still have claimed it after
+            # `end`; excluding keeps the replay honest instead of inflating the
+            # tail of the histogram
+            censored.append(t)
+            continue
+        booked.append((t, dv))
+        busy_until = t + claim
 
-    observed_days = (hum_rows[-1][0] - hum_rows[0][0]).total_seconds() / 86400
+    observed_days = (valid_rows[-1][0] - valid_rows[0][0]).total_seconds() / 86400
     if observed_days <= 0:
         sys.exit("humidity data spans zero time — nothing to rate")
-    tz = ZoneInfo(args.tz) if ZoneInfo else datetime.timezone.utc
+    if args.tz.upper() == "UTC":
+        tz = datetime.timezone.utc
+    else:
+        try:
+            tz = ZoneInfo(args.tz)
+        except ZoneInfoNotFoundError:
+            sys.exit(f"timezone {args.tz!r} not found — install the tzdata package "
+                     f"or pass --tz UTC")
     hours = Counter(t.astimezone(tz).hour for t, _ in booked)
     night = sum(hours[h] for h in (1, 2, 3, 4))
 
     print(f"window: requested {args.days:.1f} d, observed data span {observed_days:.1f} d, "
-          f"{len(hum_rows)} humidity state changes")
-    if door_rows and door_rows[0][0] > hum_rows[0][0]:
+          f"{len(valid_rows)} humidity state changes"
+          + (f" (+{len(hum_rows) - len(valid_rows)} dropout barriers)"
+             if len(hum_rows) != len(valid_rows) else ""))
+    if door_rows[0][0] > valid_rows[0][0]:
         print(f"NOTE: door history only starts {door_rows[0][0].isoformat()} — every "
               f"candidate before that rejects as door-state unknown (the helper did not "
               f"exist yet); shrink --days to the overlap for a meaningful rate")
