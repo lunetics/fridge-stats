@@ -57,7 +57,14 @@ blueprint:
             entity:
               domain: input_boolean
         helper_last_class:
-          name: Last-event-class helper
+          name: Last-event-class helper (written on booking)
+          description: >
+            This blueprint WRITES `short_grab` into it — it shares the helper
+            with the door monitor (the only dual-writer in the set). On a
+            second appliance, point it at that appliance's own helper, never
+            a shared one. The companion duration/opened-at helpers are NOT
+            touched: after a short grab they still show the last
+            temperature-channel event.
           default: input_text.fridge_last_event_class
           selector:
             entity:
@@ -114,10 +121,13 @@ blueprint:
           selector:
             number: {min: 2, max: 60, step: 1, unit_of_measurement: min}
 
-# mode single + silent: the aftershock reports of the SAME grab (a smaller
-# +1–2 %RH step usually follows within seconds) arrive while the first run is
-# still inside its claim window — they must fold into that episode, not queue
-# behind it as separate runs (queued would book one grab per aftershock).
+# mode single + silent: follow-on reports of the SAME grab that clear the
+# amplitude gate on their own (the humid air keeps mixing for a minute) arrive
+# while the first run is still inside its claim window — they must fold into
+# that episode, not queue behind it as separate runs (queued would book one
+# grab per qualifying follow-on report). The deliberate cost: genuine repeat
+# grabs within the claim window collapse into one booking too — see the
+# claim_wait_minutes description.
 mode: single
 max_exceeded: silent
 
@@ -127,8 +137,14 @@ variables:
   grab_rate_min: !input grab_rate_min
   grab_amp_min: !input grab_amp_min
   max_report_gap: !input max_report_gap
+  # `trigger is defined`/`is defined` guards: a manual Run (UI) or
+  # automation.trigger has no state trigger — from_ok must render false there
+  # so the conditions reject the run instead of erroring while rendering
+  # variables (the sibling blueprints no-op on manual runs too).
   from_ok: >-
-    {{ trigger.from_state is not none
+    {{ trigger is defined
+       and trigger.from_state is defined
+       and trigger.from_state is not none
        and trigger.from_state.state not in ['unavailable', 'unknown']
        and trigger.to_state.state not in ['unavailable', 'unknown'] }}
   d_rh: >-
@@ -148,6 +164,18 @@ triggers:
 
 conditions:
   - "{{ from_ok }}"
+  # Restart guard: after a Home Assistant restart every entity's last_reported
+  # resets to startup time (see fridge_sensor_watchdog.yaml on the same edge),
+  # so the FIRST pair after a restart can pair a full report interval's rise
+  # with a near-zero gap and fake a door-grade rate. Suppress runs until the
+  # automation has been up longer than one report gap; `this` is the
+  # automation's own state, set at startup (and on reload — equally
+  # conservative). MUST go through as_timestamp: `this` is built from
+  # State.as_dict(), so this.last_changed is an ISO STRING here — a direct
+  # datetime subtraction TemplateErrors on every evaluation and would kill
+  # detection entirely. The default 0 fails OPEN (guard passes) rather than
+  # silencing the detector on an unparsable value.
+  - "{{ as_timestamp(now()) - as_timestamp(this.last_changed, 0) > max_report_gap | float(180) }}"
   # while the door state is on, every humidity move belongs to that opening
   - condition: state
     entity_id: !input helper_door_open
@@ -157,6 +185,14 @@ conditions:
   - "{{ rate_rh_s | float(0) >= grab_rate_min | float(0.2) }}"
 
 actions:
+  # A manual Run / automation.trigger SKIPS the top-level conditions
+  # (skip_condition defaults to true) — re-assert the state-trigger gate
+  # before any side effect, otherwise a forced run would sail through the
+  # claim window and book a phantom grab with d_rh = 0.
+  - if:
+      - "{{ not from_ok }}"
+    then:
+      - stop: "no state trigger (manual run) — nothing to evaluate"
   # Claim window: a real (longer) opening spikes humidity FIRST and moves the
   # temperature a report or two later — give the temperature channel time to
   # claim the event before booking. A second REAL opening inside the window

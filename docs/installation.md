@@ -230,10 +230,12 @@ sensors), so upgrading an older install means redeploying the package and restar
 2. The thresholds are per-appliance like everything else: check your sensor's per-report
    humidity rates before trusting the defaults (door events on the reference appliances:
    ≥ +0.29 %RH/s and +7 to +33 %RH per report; evaporator moisture cycling: ≈ +0.05 %RH/s).
-3. Acceptance test: open the door for ~5 seconds. Within `claim_wait_minutes` the logbook of
-   the door-state helper shows a "Short grab booked" entry and the short-grab counter
-   increments — while a compressor cycle never books one (reference backtest: 11 days, zero
-   bookings at night).
+3. Acceptance test: open the door for ~5 seconds. AFTER `claim_wait_minutes` has elapsed
+   (default 5 min — the booking IS the claim-window timeout branch, so it cannot appear
+   earlier) the logbook of the door-state helper shows a "Short grab booked" entry and the
+   short-grab counter increments. The reference backtest booked nothing between 01:00 and
+   05:00 across 11 days (compressor cycles running, nobody home — measured by hour, not by
+   cause).
 
 Behaviour, thresholds, and the event payload: [reference.md](reference.md#humidity-grab-monitor).
 

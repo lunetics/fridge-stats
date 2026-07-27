@@ -127,7 +127,7 @@ Assigned when an event closes; stored in `helper_last_class` and the
 | `blip` | Total rise below `rise_amp_min` | Discarded; not counted or logged |
 | `compressor_cycle` | A long "open" (≥ `ajar_minutes`) whose peak stayed below `ajar_warn_temp` — a passive compressor-off warming ramp misread as an opening, not a real door event | Discarded; logbook note, not counted |
 | `stale_reset` | Close arrived more than `stale_hours` after the recorded opening (automation paused mid-event, sensor removed) | Discarded; state reset, logbook note, not counted |
-| `short_grab` | Booked by the optional humidity monitor: a humidity-rate spike with the door state off that the temperature channel did not claim within the claim window — an opening below the temperature detection floor | None — the temperature never moved, so the τ inversion has nothing to invert; counted in its own counter |
+| `short_grab` | Booked by the optional humidity monitor: a humidity-rate spike with the door state off that the temperature channel did not claim within the claim window — an opening below the temperature detection floor | None — the temperature never moved, so the τ inversion has nothing to invert; counted in its own counter. Note: the duration/opened-at helpers are NOT touched, so `sensor.fridge_door_state` still shows the LAST temperature-channel event's `last_duration_s`/`opened_at` beside `last_class: short_grab` |
 
 ## Detection state machine
 
@@ -209,13 +209,31 @@ monitor stays silent — it counts only sub-floor grabs, without a duration esti
 | `claim_wait_minutes` | no | 5 min | Wait for the temperature channel to claim before booking (reference claims arrived within 71 s) |
 
 Behaviour notes: the blueprint runs `mode: single` with `max_exceeded: silent` on purpose —
-the aftershock reports of the same grab arrive during the claim window and must fold into
-that episode instead of booking again. A second real opening inside the claim window
-suppresses the pending grab (it books as a regular opening; only the preceding grab goes
-uncounted), and a Home Assistant restart during the claim window drops the pending grab.
-Validation on the reference kitchen (11 days): 4.0 booked grabs/day on top of 3.3
-temperature-detected openings/day, zero bookings between 01:00 and 05:00 — the compressor's
-humidity cycle never triggered. Barometric pressure is not a confounder: room-barometer
+follow-on reports of the same grab that clear the amplitude gate on their own arrive during
+the claim window and must fold into that episode instead of booking again (the deliberate
+cost: genuine repeat grabs within the window collapse into one booking). A second real
+opening inside the claim window suppresses the pending grab (it books as a regular opening;
+only the preceding grab goes uncounted), and a Home Assistant restart during the claim
+window drops the pending grab. A restart guard additionally suppresses runs during the
+first `max_report_gap` seconds after startup/reload — after a restart every entity's
+`last_reported` resets, and the first report pair could otherwise fake a door-grade rate.
+Validation on the reference kitchen (recorder history — a `last_changed`-based
+approximation of the shipped rule, see the caveats below): ≈2 booked grabs/day on top of
+3.3 temperature-detected openings/day (6-day window in which the door-state helper
+actually existed; the 4.0/day published with 0.4.0 included five earlier days where no
+temperature channel existed to claim real openings — corrected in 0.4.1), zero bookings
+between 01:00 and 05:00 — the window with compressor cycles but no people; the backtest
+classifies by hour, not by cause, so this is measured night-quiet, not proof that a
+compressor cycle can never book. Caveats:
+recorder history carries no `last_reported`, so the backtest measured state-CHANGE gaps;
+the live rule's `last_reported` gaps are ≤ those, making live CANDIDATE sensitivity ≥ the
+backtest's in steady state — but the restart guard (which the backtest does not model)
+suppresses live runs for up to `max_report_gap` after startup/reload, and `mode: single`
+episode folding can merge live bookings differently, so the daily count is an
+approximation from below outside restart windows, not an unconditional lower bound.
+`analysis/backtest_short_grab.py` reproduces the METHOD against any instance and window;
+the published numbers came from the reference kitchen's rolling recorder window at
+release time. Barometric pressure is not a confounder: room-barometer
 changes showed zero correlation with in-fridge humidity rates (r ≈ −0.03 over the same
 11 days); the in-fridge humidity–pressure co-movement that does exist is internal
 vapor-pressure transience, a co-symptom of the same events.

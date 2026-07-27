@@ -3,6 +3,59 @@
 All notable changes to this project are documented in this file. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.1] - 2026-07-26
+
+Fixes from the retroactive internal review of v0.4.0 (findings internal-1…7; 2 MEDIUM,
+5 LOW, no CRITICAL/HIGH).
+
+### Fixed
+
+- Humidity monitor (both variants): **restart guard** — after a Home Assistant restart
+  every entity's `last_reported` resets to startup time, so the first report pair after a
+  restart could pair a full report interval's humidity rise with a near-zero gap, defeat
+  the rate gate and book a phantom short grab (internal-1). Runs are now suppressed until
+  the automation has been up longer than `max_report_gap`. The guard computes via
+  `as_timestamp()` on purpose: `this` is built from `State.as_dict()`, so
+  `this.last_changed` is an ISO string in automation templates and a direct datetime
+  subtraction would TemplateError on every evaluation. **Manual-run hardening** — a UI
+  "Run" / `automation.trigger` neither errors while rendering variables (`from_ok`
+  tolerates a missing state trigger like the sibling blueprints, internal-3) nor books a
+  phantom grab: forced runs skip the top-level conditions, so an action-level gate
+  re-asserts the state-trigger requirement before any side effect.
+- `analysis/backtest_short_grab.py` hardening: door states other than an explicit `off`
+  (incl. `unavailable`/`unknown`/no prior sample) reject candidates exactly like the
+  blueprint's condition; right-censored candidates at the window end are excluded;
+  non-UTC timezones fail loudly when `zoneinfo` is missing (Python < 3.9); token/URL read
+  from `HA_TOKEN`/`HA_URL` env like the sibling scripts (keeps the token out of argv);
+  requested vs observed window reported separately with a zero-span guard.
+- Backtest number corrected: the published 4.0 grabs/day treated the days BEFORE the
+  door-state helper existed as "door always closed", so real openings from five
+  pre-deployment days — unclaimable, since no temperature channel existed yet — counted
+  as short grabs. The replay now rejects candidates whose door state is anything but an
+  explicit `off` (matching the blueprint) and flags a door history that starts inside the
+  window; the honest overlap-window rate is ≈2 booked grabs/day (night-zero unchanged).
+- Evidence honesty (internal-2): the v0.4.0 validation is now labeled as what it is — a
+  `last_changed`-based recorder approximation of the shipped `last_reported` rule, with
+  its direction (live candidate sensitivity ≥ backtest in steady state) and its limits
+  (unmodeled restart-guard suppression, episode-folding differences, night-quiet measured
+  by hour not by cause) stated — in CHANGELOG/README/reference, and the backtest METHOD is
+  committed as `analysis/backtest_short_grab.py` so the numbers are re-derivable against
+  any instance and window.
+- `short_grab` class documentation states that the duration/opened-at helpers keep showing
+  the last temperature-channel event (internal-4), and the `helper_last_class` input says
+  plainly that this blueprint writes it. Acceptance test corrected: the booking appears
+  AFTER the claim window elapses, not within it (internal-5). The `mode: single` rationale
+  now names the real folding target — follow-on reports that clear the amplitude gate —
+  and its deliberate cost (internal-6).
+- Package comments no longer carry a `fridge_`-prefixed blueprint-file token, which the
+  generator's slug rewrite turned into a non-existent per-appliance blueprint name inside
+  generated second-appliance packages (internal-7).
+
+### Added
+
+- docs/conventions.md: git-workflow section — `main` is PR-only (branch protection incl.
+  admins); behaviour-carrying PRs get a review pass before merge.
+
 ## [0.4.0] - 2026-07-26
 
 ### Added
@@ -22,12 +75,16 @@ All notable changes to this project are documented in this file. The format foll
   `sensor.fridge_short_grabs` (`total_increasing`), daily meter `fridge_short_grabs_today`.
   `make_package.py` maps `counter_short_grabs` in the printed blueprint-input mapping and
   validates the new entities like the rest (27 → 30 entities).
-- Validation on the reference kitchen (11 days of recorder history, full-rule backtest incl.
-  claim window): 4.0 booked grabs/day on top of 3.3 temperature-detected openings/day —
-  consistent with the documented undercount of brief openings — and ZERO bookings between
-  01:00 and 05:00 (the compressor's humidity cycle never triggered). Both stopwatched
-  ground-truth events on the second appliance rank as its top-2 per-report rates and are the
-  only threshold passers in 33 h.
+- Validation on the reference kitchen (11 days of recorder history, rule backtest incl.
+  claim window — a `last_changed`-based approximation of the shipped rule, since recorder
+  history carries no `last_reported`; SUPERSEDED: corrected to ≈2 grabs/day in 0.4.1,
+  because this window included five pre-deployment days without a temperature channel to
+  claim real openings): 4.0 booked grabs/day on top of
+  3.3 temperature-detected openings/day — consistent with the documented undercount of
+  brief openings — and ZERO bookings between 01:00 and 05:00, the window with compressor
+  cycles but no people (measured by hour, not by cause). Both stopwatched ground-truth
+  events on the second appliance rank as its top-2 per-report rates and are the only
+  threshold passers in 33 h.
 - Pressure-confounder check (same 11 days, in-fridge barometer vs a room barometer):
   weather-scale pressure is uncorrelated with in-fridge humidity rates (r ≈ −0.03), so the
   humidity detector needs no pressure compensation. The humidity–pressure co-movement that
