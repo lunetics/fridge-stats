@@ -127,7 +127,10 @@ incident: hours at 15–21 °C).
   the only external anchor. Logging the aux sensor alongside the thermal detection for
   a few weeks yields real open/close timestamps to measure what has so far only
   been argued: the true false-positive and miss rates, the actual short-opening
-  detection floor (currently a physics estimate, never measured below 30 s), and
+  detection floor (long a physics estimate "never measured below 30 s" — the
+  2026-07 contact-GT campaign has since shown 2.5 s openings visible in the raw
+  humidity channel; the practical floor is a booking-pipeline property, not
+  physics), and
   the real undercount factor. Do this *before* adding further threshold
   parameters — it turns tuning from plausible into measured.
 - **Second appliance = the missing cross-appliance variance measurement.** Every
@@ -238,7 +241,10 @@ to the community is a genuine contribution** (needs a public repo + `source_url`
   [core#135490](https://github.com/home-assistant/core/issues/135490)) — YAML
   `platform: derivative` works. N/A for us (no derivative helper used), relevant
   if we adopt the derivative-as-condition refinement.
-- **Sensor placement change silently invalidates τ** — our 1028 s is calibrated
+- **Sensor placement change silently invalidates τ** — and the value itself
+  carries a circularity caveat: it was derived from detector-labelled episodes
+  (a contact-GT refit from raw data is pending, council 2026-07-27) — our
+  1028 s is calibrated
   for the current shelf position; moving the sensor ⇒ recalibrate
   ([placement thread #729529](https://community.home-assistant.io/t/sensors-for-refrigerator-freezer/729529)).
 - Battery-in-cold: sensors report "dead" for months while still working; remedy
